@@ -30,3 +30,11 @@ services:
         value: "24"
       - key: BACKUP_KEEP
         value: "14"
+      # Live bank feeds (Plaid). Optional — leave blank to keep the feature off
+      # (CSV import still works). PLAID_ENV: sandbox | production.
+      - key: PLAID_ENV
+        value: "sandbox"
+      - key: PLAID_CLIENT_ID
+        sync: false
+      - key: PLAID_SECRET
+        sync: false

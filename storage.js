@@ -18,6 +18,7 @@ function fileStore(dataDir) {
   const rd = (f) => JSON.parse(fs.readFileSync(f, 'utf8') || '{}');
   const wr = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2));
   const booksFile = (id) => path.join(dataDir, 'books_' + id + '.json');
+  const plaidFile = (id) => path.join(dataDir, 'plaid_' + id + '.json');
   const backupDir = path.join(dataDir, 'backups');
   const backupFile = (id) => path.join(backupDir, id + '.json');
   return {
@@ -30,7 +31,11 @@ function fileStore(dataDir) {
     async allCompanies() { return rd(COMPS); },
     async getCompany(id) { return rd(COMPS)[id] || null; },
     async setCompany(id, obj) { const c = rd(COMPS); c[id] = obj; wr(COMPS, c); },
-    async delCompany(id) { const c = rd(COMPS); delete c[id]; wr(COMPS, c); try { fs.unlinkSync(booksFile(id)); } catch (e) {} },
+    async delCompany(id) { const c = rd(COMPS); delete c[id]; wr(COMPS, c); try { fs.unlinkSync(booksFile(id)); } catch (e) {} try { fs.unlinkSync(plaidFile(id)); } catch (e) {} },
+    // ---- Plaid bank connections (access tokens live server-side only) ----
+    async getPlaidItems(companyId) { const f = plaidFile(companyId); if (!fs.existsSync(f)) return []; let o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch (e) { o = {}; } return Object.keys(o).map((itemId) => Object.assign({ itemId }, o[itemId])); },
+    async setPlaidItem(companyId, itemId, obj) { const f = plaidFile(companyId); let o = {}; if (fs.existsSync(f)) { try { o = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch (e) { o = {}; } } o[itemId] = obj; fs.writeFileSync(f, JSON.stringify(o, null, 2)); },
+    async delPlaidItem(companyId, itemId) { const f = plaidFile(companyId); if (!fs.existsSync(f)) return; let o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch (e) { o = {}; } delete o[itemId]; fs.writeFileSync(f, JSON.stringify(o, null, 2)); },
     async getBooks(id) { const f = booksFile(id); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; },
     async setBooks(id, data) { fs.writeFileSync(booksFile(id), JSON.stringify(data)); },
     async addBackup(id, snapshot) { if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true }); fs.writeFileSync(backupFile(id), JSON.stringify(snapshot)); },
@@ -63,6 +68,10 @@ function pgStore(url) {
         rev INTEGER DEFAULT 0, updated_at TIMESTAMPTZ, created TIMESTAMPTZ DEFAULT now())`);
       await pool.query(`CREATE TABLE IF NOT EXISTS books(company_id TEXT PRIMARY KEY, data JSONB)`);
       await pool.query(`CREATE TABLE IF NOT EXISTS backups(id TEXT PRIMARY KEY, created TIMESTAMPTZ DEFAULT now(), data JSONB)`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS plaid_items(
+        company_id TEXT, item_id TEXT, access_token TEXT, institution TEXT,
+        accounts JSONB DEFAULT '[]'::jsonb, created TIMESTAMPTZ DEFAULT now(),
+        PRIMARY KEY(company_id, item_id))`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_token ON users(token)`);
     },
     async getUser(email) { const r = await pool.query('SELECT * FROM users WHERE email=$1', [email]); return r.rows[0] || null; },
@@ -82,7 +91,11 @@ function pgStore(url) {
          ON CONFLICT(id) DO UPDATE SET name=$2,owner=$3,members=$4::jsonb,rev=$5,updated_at=$6`,
         [id, obj.name, obj.owner, JSON.stringify(obj.members || {}), obj.rev || 0, obj.updatedAt || new Date().toISOString()]);
     },
-    async delCompany(id) { await pool.query('DELETE FROM companies WHERE id=$1', [id]); await pool.query('DELETE FROM books WHERE company_id=$1', [id]); },
+    async delCompany(id) { await pool.query('DELETE FROM companies WHERE id=$1', [id]); await pool.query('DELETE FROM books WHERE company_id=$1', [id]); await pool.query('DELETE FROM plaid_items WHERE company_id=$1', [id]); },
+    // ---- Plaid bank connections (access tokens live server-side only) ----
+    async getPlaidItems(companyId) { const r = await pool.query('SELECT * FROM plaid_items WHERE company_id=$1 ORDER BY created', [companyId]); return r.rows.map((row) => ({ itemId: row.item_id, accessToken: row.access_token, institution: row.institution, accounts: row.accounts || [], created: row.created })); },
+    async setPlaidItem(companyId, itemId, obj) { await pool.query(`INSERT INTO plaid_items(company_id,item_id,access_token,institution,accounts) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(company_id,item_id) DO UPDATE SET access_token=$3,institution=$4,accounts=$5::jsonb`, [companyId, itemId, obj.accessToken, obj.institution || '', JSON.stringify(obj.accounts || [])]); },
+    async delPlaidItem(companyId, itemId) { await pool.query('DELETE FROM plaid_items WHERE company_id=$1 AND item_id=$2', [companyId, itemId]); },
     async getBooks(id) { const r = await pool.query('SELECT data FROM books WHERE company_id=$1', [id]); return r.rows[0] ? r.rows[0].data : null; },
     async setBooks(id, data) {
       await pool.query(

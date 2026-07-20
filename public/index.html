@@ -1310,14 +1310,25 @@ function postPayroll(){
 }
 function deletePayrollRun(id){const r=S.payrollRuns.find(x=>x.id===id);if(!r)return;if(!confirm('Delete this pay run and its journal entry?'))return;removeJE(r.jeId);S.payrollRuns=S.payrollRuns.filter(x=>x.id!==id);save();render();toast('Pay run deleted');}
 
-/* ============================================================ BANK CSV IMPORT */
+/* ============================================================ BANK IMPORT (live + CSV) */
 let biState={acc:null,rows:[]};
+// Shared category guesser (used by both CSV and live/Plaid import)
+function biGuessCat(desc,amt){const d=(desc||'').toLowerCase();const exp=S.accounts.filter(a=>a.type==='expense'),inc=S.accounts.filter(a=>a.type==='income');
+  if(amt>=0)return (inc[0]||{}).id;
+  if(/rent|lease/.test(d))return (accByName(/Rent/i)||exp[0]||{}).id;
+  if(/util|power|electric|water|gas/.test(d))return (accByName(/Utilities/i)||exp[0]||{}).id;
+  if(/software|saas|subscription|adobe|google|microsoft/.test(d))return (accByName(/Software/i)||exp[0]||{}).id;
+  if(/fee|charge|bank/.test(d))return (accByName(/Bank Fees/i)||exp[0]||{}).id;
+  if(/insur/.test(d))return (accByName(/Insurance/i)||exp[0]||{}).id;
+  if(/ad|market|facebook|meta/.test(d))return (accByName(/Advertising/i)||exp[0]||{}).id;
+  return (exp[0]||{}).id;}
 function renderBankImport(){
   const banks=S.accounts.filter(a=>a.cash||(a.type==='liability'&&/credit/i.test(a.name)));
-  setHead('Import Bank CSV','Bring in transactions from your bank statement','');
-  if(!banks.length){$('#view').innerHTML=`<div class="panel"><div class="empty">Mark an account as bank/cash first.</div></div>`;return;}
+  setHead('Import Bank','Connect your bank for live feeds, or upload/paste a statement','');
+  let v=`<div id="plaidPanel"></div>`;
+  if(!banks.length){v+=`<div class="panel"><div class="empty">Add a bank/cash account (Chart of Accounts) to import transactions into it.</div></div>`;$('#view').innerHTML=v;plaidRefresh();return;}
   if(!biState.acc)biState.acc=banks[0].id;
-  let v=`<div class="panel"><div class="pad">
+  v+=`<div class="panel"><div class="panel-h"><h2>Import from CSV</h2><span class="sub">Upload or paste a bank statement</span></div><div class="pad">
     <div class="row"><div><label class="f">Import into account</label><select onchange="biState.acc=this.value">${banks.map(a=>`<option value="${a.id}" ${biState.acc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
     <div><label class="f">Upload CSV file</label><input type="file" id="biFile" accept=".csv,text/csv" onchange="biLoadFile(this)"></div></div>
     <label class="f">…or paste CSV (columns: date, description, amount — negative = money out)</label>
@@ -1325,7 +1336,66 @@ function renderBankImport(){
     <div class="flex" style="margin-top:12px"><button class="btn" onclick="biParse()">Parse rows</button><button class="btn ghost" onclick="biSample()">Download sample CSV</button></div>
   </div></div><div id="biPreview"></div>`;
   $('#view').innerHTML=v;
+  plaidRefresh();
   if(biState.rows.length)biRenderPreview();
+}
+/* ---------- Live bank feeds (Plaid) ---------- */
+let _plaidStatus={configured:false,items:[]};
+async function plaidRefresh(){
+  const el=$('#plaidPanel');if(!el)return;
+  if(!S.sync||!S.sync.token||!S.sync.companyId){
+    el.innerHTML=`<div class="panel"><div class="panel-h"><h2>Connect a bank (live)</h2><span class="sub">Automatic transaction feeds</span></div><div class="pad"><div class="empty">Sign in under <b>Settings → Cloud sync</b> and select a company first. Live bank connections are stored securely on your server, per company.</div></div></div>`;return;
+  }
+  try{const d=await syncCall('/api/plaid/status?company='+encodeURIComponent(S.sync.companyId));_plaidStatus=d;plaidRenderPanel();}
+  catch(e){el.innerHTML=`<div class="panel"><div class="pad"><div class="empty">Live feeds unavailable: ${esc(e.message)}</div></div></div>`;}
+}
+function plaidRenderPanel(){
+  const el=$('#plaidPanel');if(!el)return;const d=_plaidStatus;
+  if(!d.configured){el.innerHTML=`<div class="panel"><div class="panel-h"><h2>Connect a bank (live)</h2><span class="badge b-gray">not set up</span></div><div class="pad"><div class="empty">Live bank feeds aren't enabled on this server yet. You can still import a CSV below.</div></div></div>`;return;}
+  const envBadge=(d.env&&d.env!=='production')?` <span class="badge b-amber">${esc(d.env)} · test mode</span>`:'';
+  let list;
+  if(d.items&&d.items.length){
+    list=`<table><thead><tr><th>Bank</th><th>Accounts</th><th></th></tr></thead><tbody>`+
+      d.items.map(it=>`<tr><td class="strong">${esc(it.institution||'Bank')}</td><td class="muted">${(it.accounts||[]).map(a=>esc(a.name)+(a.mask?' ••'+esc(a.mask):'')).join(', ')||'—'}</td><td class="num"><button class="btn ghost" onclick="plaidRemove('${it.itemId}')">Disconnect</button></td></tr>`).join('')+
+      `</tbody></table>`;
+  }else list=`<div class="empty">No banks connected yet — click “Connect a bank”.</div>`;
+  el.innerHTML=`<div class="panel"><div class="panel-h"><h2>Connect a bank (live)${envBadge}</h2><span class="sub">Automatic transaction feeds via Plaid</span><span class="spacer" style="flex:1"></span>
+    <button class="btn primary" onclick="plaidConnect()">+ Connect a bank</button>${(d.items&&d.items.length)?`<button class="btn" onclick="plaidSync()">↓ Fetch transactions</button>`:''}</div>
+    <div class="panel-b">${list}</div>
+    <div class="pad"><span class="sub">Fetched transactions land in the review list below — pick categories and import, exactly like CSV. Duplicates are auto-detected.</span></div></div>`;
+}
+function loadPlaidScript(){return new Promise((resolve,reject)=>{if(window.Plaid)return resolve();const s=document.createElement('script');s.src='https://cdn.plaid.com/link/v2/stable/link-initialize.js';s.onload=()=>resolve();s.onerror=()=>reject(new Error('Could not load Plaid Link'));document.head.appendChild(s);});}
+async function plaidConnect(){
+  try{
+    toast('Preparing secure connection…');
+    const d=await syncCall('/api/plaid/link_token',{body:{company:S.sync.companyId}});
+    await loadPlaidScript();
+    const handler=window.Plaid.create({token:d.link_token,
+      onSuccess:async(public_token)=>{try{const r=await syncCall('/api/plaid/exchange',{body:{company:S.sync.companyId,public_token}});toast('Connected '+(r.institution||'bank')+' ✓');await plaidRefresh();}catch(e){toast('Connect failed: '+e.message);}},
+      onExit:(err)=>{if(err)toast('Bank connection cancelled');}});
+    handler.open();
+  }catch(e){toast('Bank connect: '+e.message);}
+}
+async function plaidSync(){
+  const banks=S.accounts.filter(a=>a.cash||(a.type==='liability'&&/credit/i.test(a.name)));
+  if(!banks.length){toast('Add a bank/cash account first (Chart of Accounts)');return;}
+  if(!biState.acc)biState.acc=banks[0].id;
+  try{
+    toast('Fetching transactions…');
+    const d=await syncCall('/api/plaid/transactions',{body:{company:S.sync.companyId,days:90}});
+    const txns=d.transactions||[];
+    if(!txns.length){toast('No transactions yet (sandbox data can take a few seconds — try again)');return;}
+    biState.rows=txns.map(t=>{const dt=t.date,desc=t.desc,amt=round2(t.amt);
+      const dup=S.journal.some(je=>je.source==='bankimport'&&je.memo.toLowerCase().includes((desc||'').toLowerCase())&&je.date===dt&&je.lines.some(l=>Math.abs(Math.abs(l.debit-l.credit)-Math.abs(amt))<0.005));
+      return{date:dt,desc,amt,cat:biGuessCat(desc,amt),include:!dup&&!t.pending,dup};});
+    biRenderPreview();
+    toast(txns.length+' transactions fetched — review & import below');
+    const p=$('#biPreview');if(p)p.scrollIntoView({behavior:'smooth'});
+  }catch(e){toast('Fetch failed: '+e.message);}
+}
+async function plaidRemove(itemId){
+  if(!confirm('Disconnect this bank? Transactions you already imported stay in your books — only the live connection is removed.'))return;
+  try{await syncCall('/api/plaid/items/'+encodeURIComponent(itemId)+'?company='+encodeURIComponent(S.sync.companyId),{method:'DELETE'});toast('Bank disconnected');await plaidRefresh();}catch(e){toast('Disconnect failed: '+e.message);}
 }
 function biLoadFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{$('#biPaste').value=e.target.result;biParse();};r.readAsText(f);}
 function parseCSV(text){const rows=[];let row=[],cur='',q=false;for(let i=0;i<text.length;i++){const c=text[i];
@@ -1343,15 +1413,6 @@ function biParse(){
     var debi=first.findIndex(h=>/debit|withdraw/.test(h)),credi=first.findIndex(h=>/credit|deposit/.test(h));
     rows=rows.slice(1);}
   if(di<0)di=0;if(desci<0)desci=1;
-  const guessCat=(desc,amt)=>{const d=desc.toLowerCase();const exp=S.accounts.filter(a=>a.type==='expense'),inc=S.accounts.filter(a=>a.type==='income');
-    if(amt>=0)return (inc[0]||{}).id;
-    if(/rent|lease/.test(d))return (accByName(/Rent/i)||exp[0]||{}).id;
-    if(/util|power|electric|water|gas/.test(d))return (accByName(/Utilities/i)||exp[0]||{}).id;
-    if(/software|saas|subscription|adobe|google|microsoft/.test(d))return (accByName(/Software/i)||exp[0]||{}).id;
-    if(/fee|charge|bank/.test(d))return (accByName(/Bank Fees/i)||exp[0]||{}).id;
-    if(/insur/.test(d))return (accByName(/Insurance/i)||exp[0]||{}).id;
-    if(/ad|market|facebook|meta/.test(d))return (accByName(/Advertising/i)||exp[0]||{}).id;
-    return (exp[0]||{}).id;};
   biState.rows=rows.filter(r=>r.length>=2).map(r=>{
     let amt;
     if(typeof debi==='number'&&debi>=0&&typeof credi==='number'&&credi>=0){const dv=parseFloat((r[debi]||'0').replace(/[^0-9.\-]/g,''))||0,cv=parseFloat((r[credi]||'0').replace(/[^0-9.\-]/g,''))||0;amt=round2(cv-dv);}
@@ -1361,7 +1422,7 @@ function biParse(){
     dt=normDate(dt);
     const sig=dt+'|'+amt+'|'+desc.toLowerCase();
     const dup=S.journal.some(je=>je.source==='bankimport'&&je.memo.toLowerCase().includes(desc.toLowerCase())&&je.date===dt&&je.lines.some(l=>Math.abs(Math.abs(l.debit-l.credit)-Math.abs(amt))<0.005));
-    return {date:dt,desc,amt,cat:guessCat(desc,amt),include:!dup,dup};
+    return {date:dt,desc,amt,cat:biGuessCat(desc,amt),include:!dup,dup};
   }).filter(r=>r.date&&!isNaN(r.amt));
   biRenderPreview();
 }

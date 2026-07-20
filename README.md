@@ -74,6 +74,25 @@ Render redeploys on every push. To change the app UI, edit
 
 ---
 
+## Live bank feeds (Plaid) — optional
+
+LedgerBook can pull transactions straight from a bank via **Plaid**, in addition
+to CSV import. It's **off until you add Plaid keys**, so nothing breaks without them.
+
+1. Create a free developer account at https://dashboard.plaid.com/signup and copy
+   your **client_id** and your **Sandbox secret** (Team Settings → Keys).
+2. Set env vars on your service: `PLAID_CLIENT_ID`, `PLAID_SECRET`, and
+   `PLAID_ENV=sandbox` (use fake test banks — free). Redeploy.
+3. In the app: **Import Bank → Connect a bank (live)**. You must be signed in to
+   Cloud sync (the connection is stored securely on the server, per company).
+   In Sandbox, log into any test bank with username `user_good` / password
+   `pass_good`, then **Fetch transactions** and import them like a CSV.
+4. To connect **real** banks later, apply for Plaid **Production** access and set
+   `PLAID_ENV=production` with your production secret.
+
+Security: bank access tokens are stored **server-side only** and never sent to the
+browser; they're also excluded from downloadable backups.
+
 ## Run it locally
 
 No database needed for a quick local run — it falls back to JSON files:
@@ -168,6 +187,9 @@ Because the in-app snapshots live in the same database, treat **Download** (or
 | `ADMIN_EMAILS`          | Comma-separated admin emails. Blank ⇒ first user is admin.     |
 | `BACKUP_INTERVAL_HOURS` | Auto-backup interval in hours (default 24; `0` disables).      |
 | `BACKUP_KEEP`           | How many backups to retain (default 14).                       |
+| `PLAID_ENV`             | Live bank feeds environment: `sandbox` (default) or `production`. |
+| `PLAID_CLIENT_ID`       | Plaid client ID. Blank ⇒ live bank feeds disabled (CSV still works). |
+| `PLAID_SECRET`          | Plaid secret for the chosen environment. Keep it secret.        |
 
 ---
 

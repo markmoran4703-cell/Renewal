@@ -11,6 +11,7 @@
    ============================================================ */
 'use strict';
 const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -21,7 +22,32 @@ const MAX_BODY = 25 * 1024 * 1024;
 const ROLES = ['owner', 'admin', 'member', 'viewer'];
 const canWrite = (r) => r === 'owner' || r === 'admin' || r === 'member';
 const canManage = (r) => r === 'owner' || r === 'admin';
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const store = createStore();
+
+/* ---- Plaid (live bank feeds) — optional; enabled only when keys are set ---- */
+const PLAID_ENV = (process.env.PLAID_ENV || 'sandbox').trim();
+const PLAID_CLIENT_ID = (process.env.PLAID_CLIENT_ID || '').trim();
+const PLAID_SECRET = (process.env.PLAID_SECRET || '').trim();
+const PLAID_HOST = PLAID_ENV + '.plaid.com';
+const plaidConfigured = () => !!(PLAID_CLIENT_ID && PLAID_SECRET);
+// Minimal Plaid REST client: POSTs JSON with credentials injected. No SDK dependency.
+function plaidApi(endpoint, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(Object.assign({ client_id: PLAID_CLIENT_ID, secret: PLAID_SECRET }, payload || {}));
+    const r = https.request({ host: PLAID_HOST, path: endpoint, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (resp) => {
+      let data = '';
+      resp.on('data', (c) => { data += c; });
+      resp.on('end', () => {
+        let j = {}; try { j = JSON.parse(data || '{}'); } catch (e) {}
+        if (resp.statusCode >= 200 && resp.statusCode < 300) resolve(j);
+        else reject(Object.assign(new Error(j.error_message || ('Plaid HTTP ' + resp.statusCode)), { plaid: j, status: resp.statusCode }));
+      });
+    });
+    r.on('error', reject);
+    r.write(body); r.end();
+  });
+}
 
 // The app: prefer public/index.html, fall back to ../ledgerbook.html
 const APP_CANDIDATES = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, '..', 'ledgerbook.html')];
@@ -201,6 +227,98 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true, restored: rm[1], counts: snap.counts });
       }
       return send(res, 404, { error: 'Unknown admin endpoint' });
+    }
+
+    /* ---------- Plaid: live bank feeds ---------- */
+    if (pathname.indexOf('/api/plaid/') === 0) {
+      // status — is the feature available, and which banks are linked for a company?
+      if (pathname === '/api/plaid/status' && req.method === 'GET') {
+        let items = [];
+        const companyId = q.get('company');
+        if (companyId) {
+          const c = await store.getCompany(companyId);
+          if (roleOfCompany(c, me)) items = (await store.getPlaidItems(companyId)).map((it) => ({ itemId: it.itemId, institution: it.institution, accounts: it.accounts }));
+        }
+        return send(res, 200, { ok: true, configured: plaidConfigured(), env: PLAID_ENV, items });
+      }
+      if (!plaidConfigured()) return send(res, 400, { error: 'Live bank feeds are not configured on this server (Plaid keys missing).' });
+
+      // create a Link token to open Plaid Link in the browser
+      if (pathname === '/api/plaid/link_token' && req.method === 'POST') {
+        const { company } = await readBody(req);
+        const role = roleOfCompany(await store.getCompany(company), me);
+        if (!role) return send(res, 403, { error: 'No access to this company' });
+        if (!canWrite(role)) return send(res, 403, { error: 'Your role is read-only (viewer)' });
+        const lt = await plaidApi('/link/token/create', {
+          client_name: 'LedgerBook', language: 'en', country_codes: ['US'],
+          user: { client_user_id: 'co_' + company }, products: ['transactions'],
+        });
+        return send(res, 200, { ok: true, link_token: lt.link_token });
+      }
+
+      // exchange the public_token for an access token; store it server-side only
+      if (pathname === '/api/plaid/exchange' && req.method === 'POST') {
+        const { company, public_token } = await readBody(req);
+        const role = roleOfCompany(await store.getCompany(company), me);
+        if (!role) return send(res, 403, { error: 'No access to this company' });
+        if (!canWrite(role)) return send(res, 403, { error: 'Your role is read-only (viewer)' });
+        if (!public_token) return send(res, 400, { error: 'public_token required' });
+        const ex = await plaidApi('/item/public_token/exchange', { public_token });
+        const accessToken = ex.access_token, itemId = ex.item_id;
+        let institution = 'Bank', accounts = [];
+        try {
+          const ag = await plaidApi('/accounts/get', { access_token: accessToken });
+          accounts = (ag.accounts || []).map((a) => ({ account_id: a.account_id, name: a.name, mask: a.mask, subtype: a.subtype }));
+          if (ag.item && ag.item.institution_id) {
+            try { const inst = await plaidApi('/institutions/get_by_id', { institution_id: ag.item.institution_id, country_codes: ['US'] }); institution = (inst.institution && inst.institution.name) || institution; } catch (e) {}
+          }
+        } catch (e) {}
+        await store.setPlaidItem(company, itemId, { accessToken, institution, accounts });
+        return send(res, 200, { ok: true, itemId, institution, accounts });
+      }
+
+      // fetch transactions for a date window (idempotent; the app dedups on import)
+      if (pathname === '/api/plaid/transactions' && req.method === 'POST') {
+        const body = await readBody(req);
+        const company = body.company;
+        const days = Math.min(Math.max(parseInt(body.days, 10) || 90, 1), 730);
+        const role = roleOfCompany(await store.getCompany(company), me);
+        if (!role) return send(res, 403, { error: 'No access to this company' });
+        const items = await store.getPlaidItems(company);
+        if (!items.length) return send(res, 400, { error: 'No bank connected yet' });
+        const startStr = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+        const endStr = new Date().toISOString().slice(0, 10);
+        const out = [];
+        for (const it of items) {
+          let offset = 0, total = 0, tries = 0;
+          while (true) {
+            let resp;
+            try { resp = await plaidApi('/transactions/get', { access_token: it.accessToken, start_date: startStr, end_date: endStr, options: { count: 500, offset } }); }
+            catch (e) { if (e.plaid && e.plaid.error_code === 'PRODUCT_NOT_READY' && tries < 3) { tries++; await new Promise((r) => setTimeout(r, 2500)); continue; } throw e; }
+            total = resp.total_transactions || 0;
+            const batch = resp.transactions || [];
+            for (const t of batch) out.push({ date: t.date, desc: t.merchant_name || t.name || 'Bank transaction', amt: round2(-1 * (t.amount || 0)), institution: it.institution, pending: !!t.pending });
+            offset += batch.length;
+            if (!batch.length || offset >= total) break;
+          }
+        }
+        out.sort((a, b) => (a.date < b.date ? 1 : -1));
+        return send(res, 200, { ok: true, transactions: out });
+      }
+
+      // disconnect a linked bank
+      const pim = pathname.match(/^\/api\/plaid\/items\/([^\/]+)$/);
+      if (pim && req.method === 'DELETE') {
+        const itemId = decodeURIComponent(pim[1]);
+        const company = q.get('company');
+        const role = roleOfCompany(await store.getCompany(company), me);
+        if (!role || !canWrite(role)) return send(res, 403, { error: 'Not allowed' });
+        const it = (await store.getPlaidItems(company)).find((x) => x.itemId === itemId);
+        if (it) { try { await plaidApi('/item/remove', { access_token: it.accessToken }); } catch (e) {} await store.delPlaidItem(company, itemId); }
+        return send(res, 200, { ok: true });
+      }
+
+      return send(res, 404, { error: 'Unknown Plaid endpoint' });
     }
 
     /* ---------- list my companies ---------- */

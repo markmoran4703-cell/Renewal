@@ -1,11 +1,9 @@
 # LedgerBook — self-hosted, multi-user
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/YOUR-USERNAME/ledgerbook)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/markmoran4703-cell/Renewal)
 
-> Replace `YOUR-USERNAME/ledgerbook` in the button link above (and in this
-> paragraph) with your GitHub repo path after you push. Clicking it takes anyone
-> to Render with this blueprint pre-loaded — one click provisions the app **and**
-> its Postgres database.
+> Clicking the button above takes you to Render with this blueprint pre-loaded —
+> one click provisions the app **and** its Postgres database.
 
 This is the whole app in one deployable service:
 
@@ -34,7 +32,7 @@ git init
 git add .
 git commit -m "LedgerBook"
 git branch -M main
-git remote add origin https://github.com/<your-username>/ledgerbook.git
+git remote add origin https://github.com/markmoran4703-cell/Renewal.git
 git push -u origin main
 ```
 
@@ -45,7 +43,7 @@ remote and push.
 ### 2. Deploy on Render with the included blueprint
 
 1. In Render: **New ➜ Blueprint**.
-2. Connect your GitHub and pick the `ledgerbook` repo.
+2. Connect your GitHub and pick the `Renewal` repo.
 3. Render reads **`render.yaml`** and shows two resources: the web service and
    a Postgres database. Click **Apply**.
 4. Wait for the first deploy to finish. Render gives you a URL like

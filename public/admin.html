@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LedgerBook — Admin</title>
+<style>
+  :root{--bg:#f4f6f9;--panel:#fff;--ink:#1a2230;--muted:#66738a;--line:#e4e8ef;--accent:#2f6df6;--accent-soft:#eaf1ff;--green:#1f9d63;--green-soft:#e6f6ee;--red:#d64545;--red-soft:#fbeaea;--amber:#b7791f;--amber-soft:#fcf3e3;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:#0f1a2e;color:#fff;padding:16px 26px;display:flex;align-items:center;gap:12px}
+  header .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#2f6df6,#57d6a5)}
+  header h1{font-size:17px;margin:0;font-weight:700}
+  header .who{margin-left:auto;font-size:12.5px;color:#c7d2e2}
+  .wrap{max-width:1100px;margin:0 auto;padding:26px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 3px rgba(20,30,50,.06),0 6px 20px rgba(20,30,50,.05);margin-bottom:22px;overflow:hidden}
+  .panel-h{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .panel-h h2{font-size:15px;margin:0;font-weight:650}
+  .panel-h .sub{color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:10px 18px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:11px 18px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fafbfd}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}.strong{font-weight:700}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .card .val{font-size:26px;font-weight:700;margin-top:8px}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px}
+  .btn:hover{background:#fbfcfe}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn.danger{color:var(--red);border-color:#f0cdcd}
+  input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .b-blue{background:var(--accent-soft);color:var(--accent)}.b-gray{background:#eef1f6;color:#6a7688}.b-green{background:var(--green-soft);color:var(--green)}
+  .login{max-width:380px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px;box-shadow:0 10px 40px rgba(20,30,50,.1)}
+  .login h2{margin:0 0 6px}.login p{color:var(--muted);margin:0 0 18px;font-size:13px}
+  .fld{margin-bottom:12px}.fld label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:16px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:10px;font-weight:600;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1;bottom:32px}
+  a.back{color:#c7d2e2;font-size:12.5px;text-decoration:none;margin-left:14px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+let TOKEN=sessionStorage.getItem('lb_admin_token')||'';
+let SERVER=location.origin;
+let ME=sessionStorage.getItem('lb_admin_email')||'';
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+const bytes=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+const dt=s=>{if(!s)return '—';const d=new Date(s);return d.toLocaleString();};
+async function api(path,opts){opts=opts||{};const r=await fetch(SERVER+path,{method:opts.method||(opts.body?'POST':'GET'),headers:{'Content-Type':'application/json',...(TOKEN?{'Authorization':'Bearer '+TOKEN}:{})},body:opts.body?JSON.stringify(opts.body):undefined});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;}
+
+function loginView(msg){
+  $('#app').innerHTML=`<div class="login"><h2>LedgerBook Admin</h2><p>Sign in with an admin account.</p>
+    <div class="fld"><label>Email</label><input id="lEmail" value="${ME||''}"></div>
+    <div class="fld"><label>Password</label><input id="lPass" type="password"></div>
+    <button class="btn primary" style="width:100%" onclick="doLogin()">Sign in</button>
+    <div class="err" id="lErr">${msg||''}</div></div>`;
+  $('#lPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+}
+async function doLogin(){
+  const email=$('#lEmail').value.trim(),password=$('#lPass').value;
+  try{const d=await api('/api/login',{body:{email,password}});TOKEN=d.token;ME=d.email;sessionStorage.setItem('lb_admin_token',TOKEN);sessionStorage.setItem('lb_admin_email',ME);dashboard();}
+  catch(e){$('#lErr').textContent=e.message;}
+}
+function logout(){TOKEN='';sessionStorage.removeItem('lb_admin_token');loginView();}
+
+async function dashboard(){
+  let ov;
+  try{ov=await api('/api/admin/overview');}
+  catch(e){if(/Admin access/.test(e.message)){loginView('That account is not an admin.');return;}loginView(e.message);return;}
+  let bk={backups:[],config:{}};try{bk=await api('/api/admin/backups');}catch(e){}
+  const totJE=ov.companies.reduce((s,c)=>s+(c.journalEntries||0),0);
+  const totSize=ov.companies.reduce((s,c)=>s+(c.sizeBytes||0),0);
+  let h=`<header><span class="dot"></span><h1>LedgerBook Admin</h1><a class="back" href="/">← open app</a><span class="who">${ME} · storage: ${ov.storage} · admin: ${ov.adminMode} · <a href="#" onclick="logout();return false" style="color:#8fa6c9">sign out</a></span></header>
+  <div class="wrap">
+  <div class="cards">
+    <div class="card"><div class="lbl">Users</div><div class="val">${ov.users.length}</div></div>
+    <div class="card"><div class="lbl">Companies</div><div class="val">${ov.companies.length}</div></div>
+    <div class="card"><div class="lbl">Journal entries</div><div class="val">${totJE}</div></div>
+    <div class="card"><div class="lbl">Books size</div><div class="val">${bytes(totSize)}</div></div>
+    <div class="card"><div class="lbl">Backups</div><div class="val">${bk.backups.length}</div></div>
+  </div>
+
+  <div class="panel"><div class="panel-h"><h2>Companies</h2><span class="sub">${ov.companies.length}</span></div>
+  <table><thead><tr><th>Name</th><th>Owner</th><th class="num">Members</th><th class="num">Entries</th><th class="num">Rev</th><th class="num">Size</th><th>Updated</th></tr></thead><tbody>
+  ${ov.companies.map(c=>`<tr><td class="strong">${esc(c.name)}</td><td class="muted">${esc(c.owner)}</td><td class="num">${c.members}</td><td class="num">${c.journalEntries}</td><td class="num">${c.rev}</td><td class="num">${bytes(c.sizeBytes)}</td><td class="muted">${dt(c.updatedAt)}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">No companies yet</td></tr>`}
+  </tbody></table></div>
+
+  <div class="panel"><div class="panel-h"><h2>Users</h2><span class="sub">${ov.users.length}</span></div>
+  <table><thead><tr><th>Email</th><th>Name</th><th class="num">Companies</th><th>Joined</th><th></th></tr></thead><tbody>
+  ${ov.users.map(u=>`<tr><td class="strong">${esc(u.email)} ${u.admin?'<span class="badge b-blue">admin</span>':''}</td><td class="muted">${esc(u.name||'')}</td><td class="num">${u.companies}</td><td class="muted">${dt(u.created)}</td></tr>`).join('')||`<tr><td colspan="5" class="muted" style="text-align:center;padding:30px">No users yet</td></tr>`}
+  </tbody></table></div>
+
+  <div class="panel"><div class="panel-h"><h2>Backups</h2><span class="sub">auto every ${bk.config.intervalHours||'?'}h · keep ${bk.config.keep||'?'}</span><span class="spacer"></span><button class="btn primary sm" onclick="makeBackup()">+ Back up now</button></div>
+  <table><thead><tr><th>Backup</th><th>Created</th><th class="num">Size</th><th style="width:210px"></th></tr></thead><tbody id="bkBody">
+  ${bk.backups.map(b=>bkRow(b)).join('')||`<tr><td colspan="4" class="muted" style="text-align:center;padding:30px">No backups yet — one is created automatically after startup</td></tr>`}
+  </tbody></table>
+  <div style="padding:12px 18px;color:var(--muted);font-size:12px">Backups are full snapshots (users, companies, books). Download keeps an offsite copy. Restore overwrites <b>all</b> current data.</div>
+  </div>
+  </div>`;
+  $('#app').innerHTML=h;
+}
+function bkRow(b){return `<tr><td class="strong">${esc(b.id)}</td><td class="muted">${dt(b.createdAt)}</td><td class="num">${bytes(b.sizeBytes)}</td>
+  <td class="num"><button class="btn sm" onclick="downloadBackup('${esc(b.id)}')">⬇ Download</button> <button class="btn sm danger" onclick="restoreBackup('${esc(b.id)}')">Restore</button></td></tr>`;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function makeBackup(){try{await api('/api/admin/backups',{method:'POST'});toast('Backup created');dashboard();}catch(e){toast(e.message);}}
+async function downloadBackup(id){try{const snap=await api('/api/admin/backups/'+encodeURIComponent(id));const blob=new Blob([JSON.stringify(snap,null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=id+'.json';a.click();URL.revokeObjectURL(u);}catch(e){toast(e.message);}}
+async function restoreBackup(id){if(!confirm('Restore '+id+'?\n\nThis OVERWRITES all current users, companies and books with the contents of this backup. This cannot be undone.'))return;
+  try{const d=await api('/api/admin/backups/'+encodeURIComponent(id)+'/restore',{method:'POST'});toast('Restored — '+(d.counts?d.counts.companies+' companies':'ok'));dashboard();}catch(e){toast(e.message);}}
+
+if(TOKEN)dashboard();else loginView();
+</script>
+</body>
+</html>

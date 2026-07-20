@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LedgerBook — Double-Entry Bookkeeping</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#1a2230; --muted:#66738a;
+    --line:#e4e8ef; --accent:#2f6df6; --accent-soft:#eaf1ff;
+    --green:#1f9d63; --green-soft:#e6f6ee; --red:#d64545; --red-soft:#fbeaea;
+    --amber:#b7791f; --amber-soft:#fcf3e3; --radius:10px;
+    --shadow:0 1px 3px rgba(20,30,50,.06),0 6px 20px rgba(20,30,50,.05);
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none}
+  button{font-family:inherit}
+  .app{display:flex;min-height:100vh}
+  /* Sidebar */
+  .side{width:224px;background:#0f1a2e;color:#c7d2e2;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  .brand{padding:18px 20px;font-weight:700;font-size:17px;color:#fff;display:flex;align-items:center;gap:9px;letter-spacing:.2px}
+  .brand .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#2f6df6,#57d6a5);display:inline-block}
+  .company-name{font-size:11px;color:#7f8ca6;padding:0 20px 14px;margin-top:-6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  nav{flex:1;overflow:auto;padding:6px 10px}
+  nav .grp{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#5b6980;padding:14px 12px 6px}
+  nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:#c7d2e2;font-weight:500;cursor:pointer;font-size:13.5px}
+  nav a:hover{background:#1a2740;color:#fff}
+  nav a.active{background:var(--accent);color:#fff}
+  nav a .ic{width:17px;text-align:center;opacity:.9}
+  .side-foot{padding:12px 16px;border-top:1px solid #1c2942;font-size:11px;color:#6b7890}
+  /* Main */
+  main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 26px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:5}
+  .topbar h1{font-size:18px;margin:0;font-weight:650}
+  .topbar .sub{color:var(--muted);font-size:12.5px}
+  .spacer{flex:1}
+  .content{padding:24px 26px 60px;max-width:1180px;width:100%}
+  /* Buttons */
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:#c9d2e0;background:#fbfcfe}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#2560e0}
+  .btn.ghost{border-color:transparent;background:transparent}
+  .btn.danger{color:var(--red);border-color:#f0cdcd}
+  .btn.danger:hover{background:var(--red-soft)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  /* Cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+  .card .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .card .val{font-size:24px;font-weight:700;margin-top:8px;letter-spacing:-.3px}
+  .card .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:22px;overflow:hidden}
+  .panel-h{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .panel-h h2{font-size:15px;margin:0;font-weight:650}
+  .panel-h .sub{color:var(--muted);font-size:12px}
+  .panel-b{padding:4px 0}
+  .pad{padding:16px 18px}
+  /* Tables */
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:10px 18px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:11px 18px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fafbfd}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .muted{color:var(--muted)}
+  .strong{font-weight:700}
+  .empty{padding:40px 18px;text-align:center;color:var(--muted)}
+  .empty .big{font-size:32px;margin-bottom:8px}
+  /* Badges */
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px}
+  .b-green{background:var(--green-soft);color:var(--green)}
+  .b-red{background:var(--red-soft);color:var(--red)}
+  .b-amber{background:var(--amber-soft);color:var(--amber)}
+  .b-gray{background:#eef1f6;color:#6a7688}
+  .b-blue{background:var(--accent-soft);color:var(--accent)}
+  .pos{color:var(--green)} .neg{color:var(--red)}
+  /* Forms */
+  label.f{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+  .fld{margin-bottom:14px}
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(15,26,46,.5);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(15,26,46,.3);width:100%;max-width:680px;animation:pop .16s ease}
+  .modal.wide{max-width:840px}
+  @keyframes pop{from{transform:translateY(8px);opacity:.6}to{transform:none;opacity:1}}
+  .modal-h{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+  .modal-h h3{margin:0;font-size:16px}
+  .modal-b{padding:20px 22px;max-height:66vh;overflow:auto}
+  .modal-f{padding:14px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;background:#fbfcfe;border-radius:0 0 14px 14px}
+  .x{margin-left:auto;cursor:pointer;color:var(--muted);font-size:22px;line-height:1;border:none;background:none}
+  /* line items editor */
+  .li-tbl th{padding:6px 8px}
+  .li-tbl td{padding:5px 6px;border-bottom:1px solid var(--line)}
+  .li-tbl input,.li-tbl select{padding:7px 8px}
+  .li-tbl .num input{text-align:right}
+  .linkbtn{background:none;border:none;color:var(--accent);cursor:pointer;font-weight:600;padding:4px;font-size:13px}
+  .del-li{color:var(--red);cursor:pointer;border:none;background:none;font-size:16px}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  .toolbar input,.toolbar select{width:auto}
+  .search{min-width:220px}
+  .pill{padding:5px 12px;border-radius:20px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted)}
+  .pill.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .totrow td{border-top:2px solid var(--ink);font-weight:700}
+  .subtot td{background:#f7f9fc;font-weight:650}
+  .report h3{margin:22px 0 4px;font-size:14px}
+  .rep-line{display:flex;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #f0f3f8}
+  .rep-line.head{font-weight:700;color:var(--ink);border-bottom:1px solid var(--line);margin-top:8px}
+  .rep-line.total{font-weight:700;border-top:2px solid var(--ink);border-bottom:none;margin-top:4px}
+  .rep-line.sub{padding-left:22px;color:var(--ink)}
+  .rep-line .n{font-variant-numeric:tabular-nums}
+  .cbig{font-size:20px;font-weight:700}
+  .flex{display:flex;gap:10px;align-items:center}
+  .tag-note{font-size:12px;color:var(--muted);margin-top:4px}
+  .recon-diff{font-size:26px;font-weight:800}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media(max-width:820px){
+    .side{position:fixed;left:-240px;transition:.2s;z-index:40}
+    .side.open{left:0}
+    .split{grid-template-columns:1fr}
+    .menu-btn{display:inline-flex!important}
+  }
+  .menu-btn{display:none}
+  .chk{width:16px;height:16px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:10px;font-weight:600;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.25);z-index:99;opacity:0;pointer-events:none;transition:.2s}
+  .toast.show{opacity:1;bottom:30px}
+  .mini-bar{height:8px;border-radius:4px;background:#eef1f6;overflow:hidden;margin-top:10px}
+  .mini-bar>span{display:block;height:100%;background:var(--accent)}
+  .acctype-A{color:var(--accent)}
+  .hl{background:var(--accent-soft)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="brand"><span class="dot"></span>LedgerBook</div>
+    <div class="company-name" id="sideCompany">My Company</div>
+    <nav id="nav"></nav>
+    <div class="side-foot">Double-entry · saved on this device</div>
+  </aside>
+  <main>
+    <div class="topbar">
+      <button class="btn ghost menu-btn" onclick="document.getElementById('side').classList.toggle('open')">☰</button>
+      <div>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div class="sub" id="pageSub"></div>
+      </div>
+      <div class="spacer"></div>
+      <div id="pageActions" class="flex"></div>
+    </div>
+    <div class="content" id="view"></div>
+  </main>
+</div>
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   LedgerBook — a full double-entry bookkeeping engine
+   ============================================================ */
+"use strict";
+const $=s=>document.querySelector(s);
+const uid=p=>p+Math.random().toString(36).slice(2,9);
+const today=()=>new Date().toISOString().slice(0,10);
+const money=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0=n=>(n<0?'-':'')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const round2=n=>Math.round((n+Number.EPSILON)*100)/100;
+const fmtDate=d=>{if(!d)return'';const[y,m,dy]=d.split('-');return `${m}/${dy}/${y.slice(2)}`;};
+const KEY='ledgerbook_v1';
+
+/* ---------- Chart of accounts types ----------
+   type: asset, liability, equity, income, expense
+   Normal balance: asset & expense = debit; liability, equity, income = credit */
+const TYPES=['asset','liability','equity','income','expense'];
+const TYPE_LABEL={asset:'Assets',liability:'Liabilities',equity:'Equity',income:'Income',expense:'Expenses'};
+const isDebitNormal=t=>t==='asset'||t==='expense';
+
+/* ---------- Seed data ---------- */
+function seedAccounts(){
+  const a=(code,name,type,sub)=>({id:uid('acc_'),code,name,type,sub:sub||'',cash:type==='asset'&&/bank|cash|checking|savings/i.test(name)});
+  return [
+    a('1000','Business Checking','asset'),
+    a('1010','Business Savings','asset'),
+    a('1050','Petty Cash','asset'),
+    a('1200','Accounts Receivable','asset','AR'),
+    a('1300','Inventory Asset','asset'),
+    a('1500','Equipment','asset'),
+    a('1510','Accumulated Depreciation','asset'),
+    a('2000','Accounts Payable','liability','AP'),
+    a('2100','Credit Card','liability'),
+    a('2200','Sales Tax Payable','liability'),
+    a('2300','Payroll Liabilities','liability'),
+    a('2310','Payroll Tax Payable','liability'),
+    a('2500','Loan Payable','liability'),
+    a('3000','Owner\'s Equity','equity'),
+    a('3100','Owner\'s Draw','equity'),
+    a('3900','Retained Earnings','equity','RE'),
+    a('4000','Sales Revenue','income'),
+    a('4100','Service Revenue','income'),
+    a('4200','Other Income','income'),
+    a('4300','Foreign Exchange Gain/Loss','income'),
+    a('5000','Cost of Goods Sold','expense'),
+    a('6000','Advertising & Marketing','expense'),
+    a('6100','Rent','expense'),
+    a('6200','Utilities','expense'),
+    a('6300','Office Supplies','expense'),
+    a('6400','Software & Subscriptions','expense'),
+    a('6500','Payroll & Wages','expense'),
+    a('6510','Payroll Taxes','expense'),
+    a('6600','Professional Fees','expense'),
+    a('6700','Travel & Meals','expense'),
+    a('6800','Bank Fees','expense'),
+    a('6900','Insurance','expense'),
+  ];
+}
+
+/* ---------- State ---------- */
+let S=null;
+function blankState(){
+  return {
+    company:{name:'My Company',fyStart:'01-01',baseCurrency:'USD'},
+    accounts:seedAccounts(),
+    journal:[],      // {id,date,memo,ref,source,lines:[{acc,debit,credit,cleared,name,recId}]}
+    customers:[],    // {id,name,email}
+    vendors:[],      // {id,name,email}
+    invoices:[],     // {id,num,customerId,date,due,currency,rate,lines:[{desc,acc,amount,itemId,qty,unitCost}],payments:[{id,date,amount,rate,acc,jeId}],jeId,void:false}
+    bills:[],        // {id,num,vendorId,date,due,currency,rate,lines,payments,jeId,void}
+    recons:[],       // {id,acc,statementDate,ending,reconciledAt}
+    currencies:[],   // {code,rate}  rate = base currency units per 1 foreign unit
+    items:[],        // {id,name,sku,type:'inventory'|'service'|'noninventory',price,cost,qty,incomeAcc,cogsAcc,assetAcc}
+    employees:[],    // {id,name,email,payType,rate}
+    payrollRuns:[],  // {id,date,payAcc,lines:[{empId,gross,empTax,erTax,net}],jeId}
+    bankImports:[],  // {id,acc,date,importedRows}
+    sync:{url:'',email:'',token:'',lastPush:'',auto:false,companyId:'',companyName:'',role:'',lastSyncedRev:0,dirty:false,companies:[]},
+    rev:0,
+    counters:{inv:1001,bill:1,pr:1},
+  };
+}
+function ensureAcc(code,name,type){let a=S.accounts.find(x=>x.name===name);if(!a){a={id:uid('acc_'),code,name,type,sub:'',cash:false};S.accounts.push(a);}return a;}
+function ensureSchema(){
+  S.company=S.company||{name:'My Company'};
+  if(!S.company.baseCurrency)S.company.baseCurrency='USD';
+  if(!S.company.fyStart)S.company.fyStart='01-01';
+  if(S.company.autoRates==null)S.company.autoRates=false;
+  S.currencies=S.currencies||[];S.items=S.items||[];S.employees=S.employees||[];
+  S.payrollRuns=S.payrollRuns||[];S.bankImports=S.bankImports||[];
+  S.sync=Object.assign({url:'',email:'',token:'',lastPush:'',auto:false,companyId:'',companyName:'',role:'',lastSyncedRev:0,dirty:false,companies:[]},S.sync||{});
+  if(typeof S.rev!=='number')S.rev=0;
+  S.counters=S.counters||{inv:1001,bill:1,pr:1};
+  if(!S.counters.pr)S.counters.pr=1;
+  ensureAcc('1300','Inventory Asset','asset');
+  ensureAcc('2300','Payroll Liabilities','liability');
+  ensureAcc('2310','Payroll Tax Payable','liability');
+  ensureAcc('4300','Foreign Exchange Gain/Loss','income');
+  ensureAcc('6510','Payroll Taxes','expense');
+  // backfill currency on existing docs
+  const bc=S.company.baseCurrency;
+  (S.invoices||[]).forEach(i=>{if(!i.currency){i.currency=bc;i.rate=1;}});
+  (S.bills||[]).forEach(b=>{if(!b.currency){b.currency=bc;b.rate=1;}});
+}
+function load(){
+  try{const raw=localStorage.getItem(KEY);if(raw){S=JSON.parse(raw);ensureSchema();return;}}catch(e){}
+  S=blankState();ensureSchema();save();
+}
+function save(bump){
+  if(bump!==false){S.rev=(S.rev||0)+1;if(S.sync)S.sync.dirty=true;}
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){toast('Could not save (storage full?)');}
+  if(bump!==false&&S.sync&&S.sync.auto&&S.sync.token&&S.sync.companyId&&canEdit())armAutoPush();
+}
+function canEdit(){return !S.sync.role||['owner','admin','member'].includes(S.sync.role);}
+function acc(id){return S.accounts.find(a=>a.id===id);}
+function accByName(re){return S.accounts.find(a=>re.test(a.name));}
+function AR(){return accByName(/Accounts Receivable/i);}
+function AP(){return accByName(/Accounts Payable/i);}
+function custName(id){const c=S.customers.find(x=>x.id===id);return c?c.name:'—';}
+function vendName(id){const v=S.vendors.find(x=>x.id===id);return v?v.name:'—';}
+function INVASSET(){return accByName(/Inventory Asset/i);}
+function FXACC(){return accByName(/Foreign Exchange/i);}
+function PRLIAB(){return accByName(/Payroll Liabilities/i);}
+function PRTAX(){return accByName(/Payroll Tax Payable/i);}
+function item(id){return S.items.find(x=>x.id===id);}
+/* ---------- currency ---------- */
+function baseCur(){return (S.company&&S.company.baseCurrency)||'USD';}
+function curRate(code){if(!code||code===baseCur())return 1;const c=S.currencies.find(x=>x.code===code);return c?(+c.rate||1):1;}
+const CUR_SYM={USD:'$',EUR:'€',GBP:'£',JPY:'¥',CAD:'$',AUD:'$',CHF:'₣',INR:'₹',MXN:'$',CNY:'¥',BRL:'R$',ZAR:'R',NGN:'₦',SEK:'kr',NOK:'kr',NZD:'$',SGD:'$',HKD:'$',AED:'د.إ'};
+function curSym(code){return CUR_SYM[code]||'';}
+// foreign-currency formatter: "€1,000.00" or "1,000.00 XXX"
+function fx(n,code){code=code||baseCur();const s=curSym(code);const abs=Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});const sign=n<0?'-':'';return s?sign+s+abs+(code!==baseCur()?' '+code:''):sign+abs+' '+code;}
+
+/* ---------- Ledger engine ---------- */
+// Post a balanced journal entry. lines:[{acc,debit,credit,name}]. Returns entry.
+function post(entry){
+  const lines=entry.lines.map(l=>({acc:l.acc,debit:round2(l.debit||0),credit:round2(l.credit||0),cleared:false,name:l.name||'',recId:null}));
+  const d=round2(lines.reduce((s,l)=>s+l.debit,0));
+  const c=round2(lines.reduce((s,l)=>s+l.credit,0));
+  if(Math.abs(d-c)>0.001){throw new Error('Entry not balanced: debit '+d+' vs credit '+c);}
+  const je={id:uid('je_'),date:entry.date,memo:entry.memo||'',ref:entry.ref||'',source:entry.source||'journal',lines};
+  S.journal.push(je);
+  return je;
+}
+function removeJE(id){S.journal=S.journal.filter(j=>j.id!==id);}
+// balance of an account across all (optionally date-limited) journal lines; returns signed debit-credit
+function rawBalance(accId,upto){
+  let bal=0;
+  for(const je of S.journal){
+    if(upto&&je.date>upto)continue;
+    for(const l of je.lines)if(l.acc===accId)bal+=l.debit-l.credit;
+  }
+  return round2(bal);
+}
+// natural balance (positive in the account's normal direction)
+function natBalance(a,upto){const raw=rawBalance(a.id,upto);return isDebitNormal(a.type)?raw:-raw;}
+function accountLines(accId){
+  const rows=[];
+  for(const je of S.journal)for(const l of je.lines)if(l.acc===accId)
+    rows.push({je,line:l});
+  rows.sort((a,b)=>a.je.date<b.je.date?-1:a.je.date>b.je.date?1:0);
+  return rows;
+}
+// income statement net income for a date range
+function netIncome(from,to){
+  let inc=0,exp=0;
+  for(const a of S.accounts){
+    if(a.type!=='income'&&a.type!=='expense')continue;
+    let bal=0;
+    for(const je of S.journal){
+      if(from&&je.date<from)continue;
+      if(to&&je.date>to)continue;
+      for(const l of je.lines)if(l.acc===a.id)bal+=l.debit-l.credit;
+    }
+    if(a.type==='income')inc+=-bal; else exp+=bal;
+  }
+  return round2(inc-exp);
+}
+
+/* ---------- Navigation ---------- */
+const PAGES=[
+  {grp:'Overview'},
+  {id:'dashboard',name:'Dashboard',ic:'▤'},
+  {grp:'Sales'},
+  {id:'invoices',name:'Invoices & A/R',ic:'🧾'},
+  {id:'customers',name:'Customers',ic:'👥'},
+  {id:'items',name:'Products & Inventory',ic:'📦'},
+  {grp:'Purchases'},
+  {id:'bills',name:'Bills & Expenses',ic:'💳'},
+  {id:'vendors',name:'Vendors',ic:'🏢'},
+  {grp:'Payroll'},
+  {id:'payroll',name:'Payroll',ic:'💵'},
+  {grp:'Accounting'},
+  {id:'journal',name:'Journal',ic:'📖'},
+  {id:'accounts',name:'Chart of Accounts',ic:'📋'},
+  {id:'reconcile',name:'Reconcile',ic:'✓'},
+  {id:'bankimport',name:'Import Bank CSV',ic:'📥'},
+  {grp:'Reports'},
+  {id:'reports',name:'Financial Reports',ic:'📊'},
+  {grp:'Settings'},
+  {id:'settings',name:'Settings',ic:'⚙'},
+];
+let currentPage='dashboard';
+function buildNav(){
+  const nav=$('#nav');nav.innerHTML='';
+  for(const p of PAGES){
+    if(p.grp){const d=document.createElement('div');d.className='grp';d.textContent=p.grp;nav.appendChild(d);continue;}
+    const a=document.createElement('a');a.dataset.id=p.id;
+    a.innerHTML=`<span class="ic">${p.ic}</span>${p.name}`;
+    a.onclick=()=>go(p.id);
+    if(p.id===currentPage)a.classList.add('active');
+    nav.appendChild(a);
+  }
+}
+function go(id){currentPage=id;buildNav();$('#side').classList.remove('open');render();window.scrollTo(0,0);}
+
+/* ---------- Toast & modal ---------- */
+let _t;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(_t);_t=setTimeout(()=>t.classList.remove('show'),2200);}
+function openModal(html,wide){const m=$('#modal');m.className='modal'+(wide?' wide':'');m.innerHTML=html;$('#modalBg').classList.add('show');}
+function closeModal(){$('#modalBg').classList.remove('show');}
+$('#modalBg').addEventListener('mousedown',e=>{if(e.target===$('#modalBg'))closeModal();});
+
+/* ---------- Render router ---------- */
+function setHead(title,sub,actions){$('#pageTitle').textContent=title;$('#pageSub').textContent=sub||'';$('#pageActions').innerHTML=actions||'';}
+function render(){
+  $('#sideCompany').textContent=S.company.name||'My Company';
+  ({dashboard:renderDashboard,invoices:renderInvoices,customers:renderCustomers,
+    bills:renderBills,vendors:renderVendors,journal:renderJournal,accounts:renderAccounts,
+    reconcile:renderReconcile,reports:renderReports,settings:renderSettings,
+    items:renderItems,payroll:renderPayroll,bankimport:renderBankImport}[currentPage]||renderDashboard)();
+}
+
+/* ============================================================ DASHBOARD */
+function renderDashboard(){
+  setHead('Dashboard',S.company.name,
+    `<button class="btn" onclick="go('journal')">View journal</button>
+     <button class="btn primary" onclick="newInvoice()">+ New invoice</button>`);
+  const cash=S.accounts.filter(a=>a.cash).reduce((s,a)=>s+natBalance(a),0);
+  const arBal=AR()?natBalance(AR()):0;
+  const apBal=AP()?natBalance(AP()):0;
+  const y=today().slice(0,4);
+  const ytdNI=netIncome(y+'-01-01',today());
+  const ytdInc=(()=>{let s=0;for(const a of S.accounts)if(a.type==='income')s+=-sumRange(a.id,y+'-01-01',today());return s;})();
+  const ytdExp=(()=>{let s=0;for(const a of S.accounts)if(a.type==='expense')s+=sumRange(a.id,y+'-01-01',today());return s;})();
+  const openInv=S.invoices.filter(i=>!i.void&&invBalance(i)>0.005);
+  const overdue=openInv.filter(i=>i.due<today());
+  const openBills=S.bills.filter(b=>!b.void&&billBalance(b)>0.005);
+
+  let v=`<div class="cards">
+    <div class="card"><div class="lbl">Cash on hand</div><div class="val">${money0(cash)}</div><div class="hint">${S.accounts.filter(a=>a.cash).length} bank/cash accounts</div></div>
+    <div class="card"><div class="lbl">Accounts receivable</div><div class="val">${money0(arBal)}</div><div class="hint">${openInv.length} open invoice(s)${overdue.length?` · <span class="neg">${overdue.length} overdue</span>`:''}</div></div>
+    <div class="card"><div class="lbl">Accounts payable</div><div class="val">${money0(apBal)}</div><div class="hint">${openBills.length} unpaid bill(s)</div></div>
+    <div class="card"><div class="lbl">Net income (YTD)</div><div class="val ${ytdNI>=0?'pos':'neg'}">${money0(ytdNI)}</div><div class="hint">Income ${money0(ytdInc)} · Expenses ${money0(ytdExp)}</div></div>
+  </div>`;
+
+  // P&L mini
+  v+=`<div class="split">`;
+  v+=`<div class="panel"><div class="panel-h"><h2>Income vs Expenses (YTD)</h2></div><div class="pad">`;
+  const mx=Math.max(ytdInc,ytdExp,1);
+  v+=`<div style="margin-bottom:14px"><div class="flex" style="justify-content:space-between"><span class="muted">Income</span><strong class="pos">${money(ytdInc)}</strong></div><div class="mini-bar"><span style="width:${ytdInc/mx*100}%;background:var(--green)"></span></div></div>`;
+  v+=`<div><div class="flex" style="justify-content:space-between"><span class="muted">Expenses</span><strong class="neg">${money(ytdExp)}</strong></div><div class="mini-bar"><span style="width:${ytdExp/mx*100}%;background:var(--red)"></span></div></div>`;
+  v+=`<div class="rep-line total" style="margin-top:16px"><span>Net income</span><span class="n ${ytdNI>=0?'pos':'neg'}">${money(ytdNI)}</span></div>`;
+  v+=`</div></div>`;
+
+  // Recent activity
+  v+=`<div class="panel"><div class="panel-h"><h2>Recent transactions</h2><span class="spacer"></span><button class="btn sm ghost" onclick="go('journal')">All →</button></div><div class="panel-b"><table><tbody>`;
+  const recent=[...S.journal].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0).slice(0,7);
+  if(!recent.length)v+=`<tr><td class="empty">No transactions yet</td></tr>`;
+  for(const je of recent){const amt=je.lines.reduce((s,l)=>s+l.debit,0);
+    v+=`<tr><td class="muted" style="width:74px">${fmtDate(je.date)}</td><td>${esc(je.memo||sourceLabel(je.source))}<div class="muted" style="font-size:11px">${sourceLabel(je.source)}${je.ref?' · '+esc(je.ref):''}</div></td><td class="num strong">${money(amt)}</td></tr>`;}
+  v+=`</tbody></table></div></div>`;
+  v+=`</div>`;
+
+  // Attention lists
+  if(overdue.length){
+    v+=`<div class="panel"><div class="panel-h"><h2>Overdue invoices</h2></div><div class="panel-b"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Due</th><th class="num">Balance</th><th></th></tr></thead><tbody>`;
+    for(const i of overdue)v+=`<tr><td class="strong">#${i.num}</td><td>${esc(custName(i.customerId))}</td><td class="neg">${fmtDate(i.due)}</td><td class="num strong">${money(invBalance(i))}</td><td class="num"><button class="btn sm primary" onclick="payInvoice('${i.id}')">Receive</button></td></tr>`;
+    v+=`</tbody></table></div></div>`;
+  }
+  $('#view').innerHTML=v;
+}
+function sumRange(accId,from,to){let bal=0;for(const je of S.journal){if(from&&je.date<from)continue;if(to&&je.date>to)continue;for(const l of je.lines)if(l.acc===accId)bal+=l.debit-l.credit;}return round2(bal);}
+function sourceLabel(s){return {invoice:'Invoice',payment:'Payment received',bill:'Bill',billpay:'Bill payment',expense:'Expense',bankimport:'Bank import',journal:'Journal entry',opening:'Opening balance'}[s]||'Journal entry';}
+
+/* ============================================================ CHART OF ACCOUNTS */
+function renderAccounts(){
+  setHead('Chart of Accounts',S.accounts.length+' accounts',
+    `<button class="btn primary" onclick="editAccount()">+ Add account</button>`);
+  let v='';
+  for(const t of TYPES){
+    const list=S.accounts.filter(a=>a.type===t).sort((a,b)=>a.code<b.code?-1:1);
+    if(!list.length)continue;
+    let tot=0;
+    v+=`<div class="panel"><div class="panel-h"><h2>${TYPE_LABEL[t]}</h2><span class="sub">${list.length} accounts</span></div><div class="panel-b"><table><thead><tr><th style="width:80px">Code</th><th>Name</th><th class="num">Balance</th><th style="width:90px"></th></tr></thead><tbody>`;
+    for(const a of list){const b=natBalance(a);tot+=b;
+      v+=`<tr><td class="muted">${esc(a.code)}</td><td class="strong">${esc(a.name)} ${a.cash?'<span class="badge b-blue">bank</span>':''}${a.sub==='AR'?'<span class="badge b-gray">A/R</span>':''}${a.sub==='AP'?'<span class="badge b-gray">A/P</span>':''}</td><td class="num">${money(b)}</td><td class="num"><button class="btn sm ghost" onclick="editAccount('${a.id}')">Edit</button></td></tr>`;}
+    v+=`<tr class="totrow"><td></td><td>Total ${TYPE_LABEL[t]}</td><td class="num">${money(tot)}</td><td></td></tr>`;
+    v+=`</tbody></table></div></div>`;
+  }
+  $('#view').innerHTML=v;
+}
+function editAccount(id){
+  const a=id?acc(id):{code:'',name:'',type:'expense',sub:'',cash:false};
+  openModal(`<div class="modal-h"><h3>${id?'Edit':'New'} account</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row"><div><label class="f">Account code</label><input id="acCode" value="${esc(a.code)}" placeholder="e.g. 6100"></div>
+    <div><label class="f">Type</label><select id="acType">${TYPES.map(t=>`<option value="${t}" ${a.type===t?'selected':''}>${TYPE_LABEL[t]}</option>`).join('')}</select></div></div>
+    <div class="fld"><label class="f">Account name</label><input id="acName" value="${esc(a.name)}" placeholder="e.g. Rent"></div>
+    <label class="flex" style="font-size:13px;font-weight:600"><input type="checkbox" id="acCash" class="chk" style="width:auto" ${a.cash?'checked':''}> This is a bank / cash account (appears in reconciliation)</label>
+  </div>
+  <div class="modal-f">${id&&rawBalance(id)===0?`<button class="btn danger" onclick="deleteAccount('${id}')">Delete</button>`:''}<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveAccount('${id||''}')">Save</button></div>`);
+}
+function saveAccount(id){
+  const code=$('#acCode').value.trim(),name=$('#acName').value.trim(),type=$('#acType').value,cash=$('#acCash').checked;
+  if(!name){toast('Name required');return;}
+  if(id){const a=acc(id);Object.assign(a,{code,name,type,cash});}
+  else S.accounts.push({id:uid('acc_'),code,name,type,sub:'',cash});
+  save();closeModal();render();toast('Account saved');
+}
+function deleteAccount(id){if(rawBalance(id)!==0){toast('Account has activity');return;}S.accounts=S.accounts.filter(a=>a.id!==id);save();closeModal();render();toast('Account deleted');}
+
+/* ============================================================ CUSTOMERS / VENDORS */
+function renderCustomers(){nameList('customers','Customers','customer');}
+function renderVendors(){nameList('vendors','Vendors','vendor');}
+function nameList(coll,title,noun){
+  const list=S[coll];
+  setHead(title,list.length+' '+coll,`<button class="btn primary" onclick="editParty('${coll}')">+ Add ${noun}</button>`);
+  let v=`<div class="panel"><div class="panel-b"><table><thead><tr><th>Name</th><th>Email</th><th class="num">${noun==='customer'?'Open A/R':'Open A/P'}</th><th style="width:80px"></th></tr></thead><tbody>`;
+  if(!list.length)v+=`<tr><td colspan="4" class="empty"><div class="big">${noun==='customer'?'👥':'🏢'}</div>No ${coll} yet</td></tr>`;
+  for(const p of list){
+    const open=noun==='customer'
+      ? S.invoices.filter(i=>!i.void&&i.customerId===p.id).reduce((s,i)=>s+invBalance(i),0)
+      : S.bills.filter(b=>!b.void&&b.vendorId===p.id).reduce((s,b)=>s+billBalance(b),0);
+    v+=`<tr><td class="strong">${esc(p.name)}</td><td class="muted">${esc(p.email||'')}</td><td class="num">${money(open)}</td><td class="num"><button class="btn sm ghost" onclick="editParty('${coll}','${p.id}')">Edit</button></td></tr>`;
+  }
+  v+=`</tbody></table></div></div>`;
+  $('#view').innerHTML=v;
+}
+function editParty(coll,id){
+  const noun=coll==='customers'?'customer':'vendor';
+  const p=id?S[coll].find(x=>x.id===id):{name:'',email:''};
+  openModal(`<div class="modal-h"><h3>${id?'Edit':'New'} ${noun}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b"><div class="fld"><label class="f">Name</label><input id="pName" value="${esc(p.name)}"></div>
+  <div class="fld"><label class="f">Email (optional)</label><input id="pEmail" value="${esc(p.email||'')}"></div></div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveParty('${coll}','${id||''}')">Save</button></div>`);
+}
+function saveParty(coll,id){const name=$('#pName').value.trim(),email=$('#pEmail').value.trim();if(!name){toast('Name required');return;}
+  if(id){Object.assign(S[coll].find(x=>x.id===id),{name,email});}else S[coll].push({id:uid('p_'),name,email});
+  save();closeModal();render();toast('Saved');}
+
+/* ============================================================ INVOICES / A-R */
+function invTotal(i){return round2(i.lines.reduce((s,l)=>s+(+l.amount||0),0));}
+function invPaid(i){return round2((i.payments||[]).reduce((s,p)=>s+(+p.amount||0),0));}
+function invBalance(i){return round2(invTotal(i)-invPaid(i));}
+function invStatus(i){if(i.void)return['Void','b-gray'];const b=invBalance(i);if(b<=0.005)return['Paid','b-green'];if(invPaid(i)>0.005)return['Partial','b-amber'];if(i.due<today())return['Overdue','b-red'];return['Open','b-blue'];}
+
+function invBase(i){return round2(invBalance(i)*(i.rate||1));}
+function renderInvoices(){
+  const open=S.invoices.filter(i=>!i.void).reduce((s,i)=>s+invBase(i),0);
+  setHead('Invoices & Accounts Receivable',money(open)+' outstanding'+(S.currencies.length?' (in '+baseCur()+')':''),`<button class="btn primary" onclick="newInvoice()">+ New invoice</button>`);
+  let v=`<div class="panel"><div class="panel-b"><table><thead><tr><th>#</th><th>Customer</th><th>Date</th><th>Due</th><th class="num">Total</th><th class="num">Balance</th><th>Status</th><th style="width:150px"></th></tr></thead><tbody>`;
+  const list=[...S.invoices].sort((a,b)=>b.date<a.date?-1:1);
+  if(!list.length)v+=`<tr><td colspan="8" class="empty"><div class="big">🧾</div>No invoices yet — create your first one</td></tr>`;
+  for(const i of list){const[st,cls]=invStatus(i);const fc=i.currency&&i.currency!==baseCur();
+    v+=`<tr><td class="strong">#${i.num}</td><td>${esc(custName(i.customerId))}${fc?` <span class="badge b-gray">${i.currency}</span>`:''}</td><td class="muted">${fmtDate(i.date)}</td><td class="muted">${fmtDate(i.due)}</td><td class="num">${fc?fx(invTotal(i),i.currency):money(invTotal(i))}</td><td class="num strong">${fc?fx(invBalance(i),i.currency):money(invBalance(i))}</td><td><span class="badge ${cls}">${st}</span></td>
+    <td class="num">${!i.void&&invBalance(i)>0.005?`<button class="btn sm primary" onclick="payInvoice('${i.id}')">Receive</button> `:''}<button class="btn sm ghost" onclick="viewInvoice('${i.id}')">Open</button></td></tr>`;}
+  v+=`</tbody></table></div></div>`;
+  $('#view').innerHTML=v;
+}
+function newInvoice(){editInvoice();}
+function normLine(l){const qty=(l.qty===''||l.qty==null)?1:(+l.qty||0);const price=+l.price||0;const amt=l.itemId||l.qty!=null?round2(qty*price):(+l.amount||0);return {itemId:l.itemId||'',desc:l.desc||'',acc:l.acc,qty:qty,price:price,amount:amt};}
+function editInvoice(id){
+  if(!S.customers.length){toast('Add a customer first');go('customers');editParty('customers');return;}
+  const i=id?S.invoices.find(x=>x.id===id):{id:'',num:S.counters.inv,customerId:S.customers[0].id,date:today(),due:addDays(today(),30),currency:baseCur(),rate:1,lines:[{itemId:'',desc:'',acc:defIncome(),qty:1,price:''}]};
+  window.INV=JSON.parse(JSON.stringify(i));
+  // normalize legacy lines (amount-only) into qty/price
+  window.INV.lines=window.INV.lines.map(l=>l.qty!=null?l:{itemId:l.itemId||'',desc:l.desc,acc:l.acc,qty:1,price:l.amount!=null?l.amount:''});
+  if(!window.INV.currency)window.INV.currency=baseCur();
+  openModal(`<div class="modal-h"><h3>${id?'Edit invoice #'+i.num:'New invoice'}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row3">
+      <div><label class="f">Customer</label><select id="ivCust">${S.customers.map(c=>`<option value="${c.id}" ${i.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label class="f">Invoice date</label><input type="date" id="ivDate" value="${i.date}"></div>
+      <div><label class="f">Due date</label><input type="date" id="ivDue" value="${i.due}"></div>
+    </div>
+    ${curPickerHTML('iv',window.INV.currency,window.INV.rate,'invRateChanged')}
+    <label class="f">Line items</label>
+    <table class="li-tbl"><thead><tr><th style="width:150px">Item</th><th>Description</th><th style="width:150px">Income account</th><th class="num" style="width:60px">Qty</th><th class="num" style="width:90px">Price</th><th class="num" style="width:90px">Amount</th><th></th></tr></thead><tbody id="invLines"></tbody></table>
+    <button class="linkbtn" onclick="INV.lines.push({itemId:'',desc:'',acc:defIncome(),qty:1,price:''});renderInvLines()">+ Add line</button>
+    <div class="rep-line total" style="margin-top:14px"><span>Total</span><span class="n" id="ivTotal">$0.00</span></div>
+    <div class="tag-note" id="ivBase"></div>
+  </div>
+  <div class="modal-f">${id?`<button class="btn danger" onclick="voidInvoice('${id}')">Void</button>`:''}<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveInvoice('${id||''}')">${id?'Save':'Create invoice'}</button></div>`,true);
+  renderInvLines();
+}
+function curPickerHTML(prefix,cur,rate,cb){
+  if(!S.currencies.length)return '';
+  const opts=[baseCur(),...S.currencies.map(c=>c.code)];
+  return `<div class="row"><div><label class="f">Currency</label><select id="${prefix}Cur" onchange="${cb}()">${opts.map(c=>`<option value="${c}" ${cur===c?'selected':''}>${c}${c===baseCur()?' (base)':''}</option>`).join('')}</select></div>
+    <div><label class="f">Exchange rate (1 ${cur||baseCur()} = ? ${baseCur()})</label><input id="${prefix}Rate" class="num" value="${rate||1}" style="text-align:right" ${cur===baseCur()?'disabled':''}></div></div>`;
+}
+function invRateChanged(){const cur=$('#ivCur').value;window.INV.currency=cur;const rEl=$('#ivRate');rEl.disabled=cur===baseCur();if(cur===baseCur()){rEl.value=1;window.INV.rate=1;}else{rEl.value=curRate(cur);window.INV.rate=curRate(cur);}rEl.previousElementSibling; invCalc();}
+function invPickItem(ix,itemId){const it=item(itemId);const l=window.INV.lines[ix];l.itemId=itemId;if(it){l.desc=it.name;l.acc=it.incomeAcc||defIncome();l.price=it.price;if(!(+l.qty))l.qty=1;}renderInvLines();}
+function renderInvLines(){const incomeAccts=S.accounts.filter(a=>a.type==='income');const cur=window.INV.currency||baseCur();
+  $('#invLines').innerHTML=window.INV.lines.map((l,ix)=>{const amt=round2((+l.qty||0)*(+l.price||0));return `<tr>
+    <td><select onchange="invPickItem(${ix},this.value)"><option value="">— custom —</option>${S.items.map(it=>`<option value="${it.id}" ${l.itemId===it.id?'selected':''}>${esc(it.name)}${it.type==='inventory'?' ('+(+it.qty||0)+')':''}</option>`).join('')}</select></td>
+    <td><input value="${esc(l.desc)}" oninput="INV.lines[${ix}].desc=this.value" placeholder="Description"></td>
+    <td><select onchange="INV.lines[${ix}].acc=this.value">${incomeAccts.map(a=>`<option value="${a.id}" ${l.acc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></td>
+    <td class="num"><input class="num" value="${l.qty}" oninput="INV.lines[${ix}].qty=this.value;invCalc()" style="text-align:right"></td>
+    <td class="num"><input class="num" value="${l.price}" oninput="INV.lines[${ix}].price=this.value;invCalc()" placeholder="0.00" style="text-align:right"></td>
+    <td class="num strong">${fx(amt,cur)}</td>
+    <td style="width:26px"><button class="del-li" onclick="INV.lines.splice(${ix},1);renderInvLines()">×</button></td></tr>`;}).join('');
+  invCalc();}
+function invCalc(){const cur=window.INV.currency||baseCur();const t=round2(window.INV.lines.reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0));const el=$('#ivTotal');if(el)el.textContent=fx(t,cur);
+  const b=$('#ivBase');if(b)b.innerHTML=cur!==baseCur()?`≈ ${money(round2(t*(+window.INV.rate||1)))} ${baseCur()} at rate ${window.INV.rate}`:'';}
+function defIncome(){const a=S.accounts.find(a=>a.type==='income');return a?a.id:'';}
+function addDays(d,n){const dt=new Date(d+'T00:00:00');dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10);}
+function invApplyStock(inv){for(const l of inv.lines){const it=item(l.itemId);if(it&&it.type==='inventory')it.qty=round2((+it.qty||0)-(+l.qty||0));}}
+function invUnapplyStock(inv){for(const l of inv.lines){const it=item(l.itemId);if(it&&it.type==='inventory')it.qty=round2((+it.qty||0)+(+l.qty||0));}}
+
+function saveInvoice(id){
+  const inv=window.INV;
+  inv.customerId=$('#ivCust').value;inv.date=$('#ivDate').value;inv.due=$('#ivDue').value;
+  if($('#ivCur')){inv.currency=$('#ivCur').value;inv.rate=inv.currency===baseCur()?1:round2(+($('#ivRate').value)||curRate(inv.currency));}
+  else{inv.currency=baseCur();inv.rate=1;}
+  const cleanLines=inv.lines.map(normLine).filter(l=>l.amount!==0);
+  if(!cleanLines.length){toast('Add at least one line with an amount');return;}
+  const rate=inv.rate||1;const arId=AR().id;const cogsFallback=accByName(/Cost of Goods/i).id;const invAssetId=INVASSET().id;
+  const curTag=inv.currency!==baseCur()?' ['+inv.currency+' @'+rate+']':'';
+  // revenue side (base currency)
+  let arDebit=0;const jlines=[];
+  for(const l of cleanLines){const base=round2(l.amount*rate);arDebit=round2(arDebit+base);jlines.push({acc:l.acc,debit:0,credit:base,name:l.desc});}
+  jlines.unshift({acc:arId,debit:arDebit,credit:0,name:custName(inv.customerId)});
+  // COGS / inventory relief for inventory item lines (unit cost is in base currency)
+  for(const l of cleanLines){const it=item(l.itemId);if(it&&it.type==='inventory'){const uc=+it.cost||0;l.unitCost=uc;const c=round2(uc*l.qty);if(c>0){jlines.push({acc:it.cogsAcc||cogsFallback,debit:c,credit:0,name:'COGS: '+it.name});jlines.push({acc:it.assetAcc||invAssetId,debit:0,credit:c,name:it.name});}}}
+  if(id){const existing=S.invoices.find(x=>x.id===id);
+    invUnapplyStock(existing);
+    removeJE(existing.jeId);
+    const je=post({date:inv.date,memo:'Invoice #'+existing.num+' — '+custName(inv.customerId)+curTag,ref:'INV#'+existing.num,source:'invoice',lines:jlines});
+    existing.jeId=je.id;existing.customerId=inv.customerId;existing.date=inv.date;existing.due=inv.due;existing.currency=inv.currency;existing.rate=rate;existing.lines=cleanLines;
+    invApplyStock(existing);
+  }else{
+    const num=S.counters.inv++;
+    const je=post({date:inv.date,memo:'Invoice #'+num+' — '+custName(inv.customerId)+curTag,ref:'INV#'+num,source:'invoice',lines:jlines});
+    const rec={id:uid('inv_'),num,customerId:inv.customerId,date:inv.date,due:inv.due,currency:inv.currency,rate,lines:cleanLines,payments:[],jeId:je.id,void:false};
+    S.invoices.push(rec);invApplyStock(rec);
+  }
+  save();closeModal();render();toast('Invoice saved');
+}
+function viewInvoice(id){
+  const i=S.invoices.find(x=>x.id===id);const[st,cls]=invStatus(i);const cur=i.currency||baseCur();const fc=cur!==baseCur();
+  let pays=(i.payments||[]).map(p=>`<div class="rep-line sub"><span>${fmtDate(p.date)} · Payment to ${esc(acc(p.acc)?acc(p.acc).name:'')}</span><span class="n">${fx(p.amount,cur)}</span></div>`).join('');
+  openModal(`<div class="modal-h"><h3>Invoice #${i.num}</h3><span class="badge ${cls}" style="margin-left:10px">${st}</span>${fc?`<span class="badge b-gray" style="margin-left:6px">${cur} @ ${i.rate}</span>`:''}<button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="flex" style="justify-content:space-between;margin-bottom:14px"><div><div class="muted" style="font-size:12px">Bill to</div><strong>${esc(custName(i.customerId))}</strong></div>
+    <div style="text-align:right"><div class="muted" style="font-size:12px">Date ${fmtDate(i.date)} · Due ${fmtDate(i.due)}</div></div></div>
+    <table><thead><tr><th>Description</th><th>Account</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody>
+    ${i.lines.map(l=>`<tr><td>${esc(l.desc||'—')}</td><td class="muted">${esc(acc(l.acc)?acc(l.acc).name:'')}</td><td class="num muted">${l.qty!=null?l.qty:''}</td><td class="num">${fx(l.amount,cur)}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="rep-line head"><span>Total</span><span class="n">${fx(invTotal(i),cur)}</span></div>
+    ${pays}
+    <div class="rep-line total"><span>Balance due</span><span class="n">${fx(invBalance(i),cur)}</span></div>
+    ${fc?`<div class="tag-note">Posted to books at ${money(round2(invTotal(i)*i.rate))} ${baseCur()}</div>`:''}
+  </div>
+  <div class="modal-f">${!i.void?`<button class="btn" onclick="editInvoice('${i.id}')">Edit</button>`:''}${!i.void&&invBalance(i)>0.005?`<button class="btn primary" onclick="payInvoice('${i.id}')">Receive payment</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`,true);
+}
+function payInvoice(id){
+  const i=S.invoices.find(x=>x.id===id);const bal=invBalance(i);const cur=i.currency||baseCur();const fc=cur!==baseCur();
+  const banks=S.accounts.filter(a=>a.cash);
+  openModal(`<div class="modal-h"><h3>Receive payment — Invoice #${i.num}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row3">
+      <div><label class="f">Date</label><input type="date" id="pyDate" value="${today()}"></div>
+      <div><label class="f">Amount (${cur})</label><input id="pyAmt" class="num" value="${bal.toFixed(2)}" style="text-align:right"></div>
+      <div><label class="f">Deposit to</label><select id="pyAcc">${banks.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
+    </div>
+    ${fc?`<div class="fld"><label class="f">Exchange rate at payment (1 ${cur} = ? ${baseCur()})</label><input id="pyRate" class="num" value="${i.rate}" style="text-align:right"></div>`:''}
+    <div class="tag-note">Balance due: ${fx(bal,cur)}${fc?' · invoice rate '+i.rate:''}</div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doPayInvoice('${id}')">Record payment</button></div>`);
+}
+function doPayInvoice(id){
+  const i=S.invoices.find(x=>x.id===id);const cur=i.currency||baseCur();
+  const amt=round2(+$('#pyAmt').value||0),date=$('#pyDate').value,accId=$('#pyAcc').value;
+  if(amt<=0){toast('Enter an amount');return;}
+  const payRate=$('#pyRate')?round2(+$('#pyRate').value||i.rate):(i.rate||1);
+  const invRate=i.rate||1;
+  const baseCash=round2(amt*payRate);        // what we actually received, in base
+  const arRelief=round2(amt*invRate);         // relieve AR at the original booked rate
+  const diff=round2(baseCash-arRelief);       // realized FX gain(+)/loss(-)
+  const lines=[{acc:accId,debit:baseCash,credit:0,name:custName(i.customerId)},{acc:AR().id,debit:0,credit:arRelief,name:custName(i.customerId)}];
+  if(Math.abs(diff)>0.005){if(diff>0)lines.push({acc:FXACC().id,debit:0,credit:diff,name:'FX gain'});else lines.push({acc:FXACC().id,debit:-diff,credit:0,name:'FX loss'});}
+  const je=post({date,memo:'Payment received — Invoice #'+i.num+(cur!==baseCur()?' ['+cur+']':''),ref:'INV#'+i.num,source:'payment',lines});
+  i.payments=i.payments||[];i.payments.push({id:uid('py_'),date,amount:amt,rate:payRate,acc:accId,jeId:je.id});
+  save();closeModal();render();toast('Payment recorded');
+}
+function voidInvoice(id){const i=S.invoices.find(x=>x.id===id);
+  if((i.payments||[]).length){toast('Remove payments first');return;}
+  invUnapplyStock(i);removeJE(i.jeId);i.void=true;save();closeModal();render();toast('Invoice voided');}
+
+/* ============================================================ BILLS / A-P / EXPENSES */
+function billTotal(b){return round2(b.lines.reduce((s,l)=>s+(+l.amount||0),0));}
+function billPaid(b){return round2((b.payments||[]).reduce((s,p)=>s+(+p.amount||0),0));}
+function billBalance(b){return round2(billTotal(b)-billPaid(b));}
+function billStatus(b){if(b.void)return['Void','b-gray'];const bal=billBalance(b);if(bal<=0.005)return['Paid','b-green'];if(billPaid(b)>0.005)return['Partial','b-amber'];if(b.due<today())return['Overdue','b-red'];return['Unpaid','b-blue'];}
+
+function billBase(b){return round2(billBalance(b)*(b.rate||1));}
+function renderBills(){
+  const open=S.bills.filter(b=>!b.void).reduce((s,b)=>s+billBase(b),0);
+  setHead('Bills & Expenses',money(open)+' payable'+(S.currencies.length?' (in '+baseCur()+')':''),
+    `<button class="btn" onclick="newExpense()">+ Quick expense</button><button class="btn primary" onclick="newBill()">+ Enter bill</button>`);
+  let v=`<div class="panel"><div class="panel-b"><table><thead><tr><th>#</th><th>Vendor</th><th>Date</th><th>Due</th><th class="num">Total</th><th class="num">Balance</th><th>Status</th><th style="width:150px"></th></tr></thead><tbody>`;
+  const list=[...S.bills].sort((a,b)=>b.date<a.date?-1:1);
+  if(!list.length)v+=`<tr><td colspan="8" class="empty"><div class="big">💳</div>No bills yet. Use “Quick expense” for things you paid on the spot, or “Enter bill” for money you owe.</td></tr>`;
+  for(const b of list){const[st,cls]=billStatus(b);const fc=b.currency&&b.currency!==baseCur();
+    v+=`<tr><td class="strong">${b.num?'#'+b.num:'—'}</td><td>${esc(vendName(b.vendorId))}${fc?` <span class="badge b-gray">${b.currency}</span>`:''}</td><td class="muted">${fmtDate(b.date)}</td><td class="muted">${b.due?fmtDate(b.due):'—'}</td><td class="num">${fc?fx(billTotal(b),b.currency):money(billTotal(b))}</td><td class="num strong">${fc?fx(billBalance(b),b.currency):money(billBalance(b))}</td><td><span class="badge ${cls}">${st}</span></td>
+    <td class="num">${!b.void&&billBalance(b)>0.005?`<button class="btn sm primary" onclick="payBill('${b.id}')">Pay</button> `:''}<button class="btn sm ghost" onclick="viewBill('${b.id}')">Open</button></td></tr>`;}
+  v+=`</tbody></table></div></div>`;
+  $('#view').innerHTML=v;
+}
+function defExpense(){const a=S.accounts.find(a=>a.type==='expense');return a?a.id:'';}
+function newBill(){editBill();}
+function editBill(id){
+  if(!S.vendors.length){toast('Add a vendor first');go('vendors');editParty('vendors');return;}
+  const b=id?S.bills.find(x=>x.id===id):{vendorId:S.vendors[0].id,num:'',date:today(),due:addDays(today(),30),currency:baseCur(),rate:1,lines:[{itemId:'',desc:'',acc:defExpense(),qty:1,price:''}]};
+  window.BILL=JSON.parse(JSON.stringify(b));
+  window.BILL.lines=window.BILL.lines.map(l=>l.qty!=null?l:{itemId:l.itemId||'',desc:l.desc,acc:l.acc,qty:1,price:l.amount!=null?l.amount:''});
+  if(!window.BILL.currency)window.BILL.currency=baseCur();
+  openModal(`<div class="modal-h"><h3>${id?'Edit bill':'Enter bill'}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row3">
+      <div><label class="f">Vendor</label><select id="blVend">${S.vendors.map(x=>`<option value="${x.id}" ${b.vendorId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+      <div><label class="f">Bill date</label><input type="date" id="blDate" value="${b.date}"></div>
+      <div><label class="f">Due date</label><input type="date" id="blDue" value="${b.due}"></div>
+    </div>
+    <div class="fld"><label class="f">Reference / bill # (optional)</label><input id="blNum" value="${esc(b.num||'')}"></div>
+    ${curPickerHTML('bl',window.BILL.currency,window.BILL.rate,'billRateChanged')}
+    <label class="f">Line items <span class="muted" style="font-weight:400">— pick an inventory item to receive stock</span></label>
+    <table class="li-tbl"><thead><tr><th style="width:150px">Item</th><th>Description</th><th style="width:150px">Account</th><th class="num" style="width:60px">Qty</th><th class="num" style="width:90px">Cost</th><th class="num" style="width:90px">Amount</th><th></th></tr></thead><tbody id="billLines"></tbody></table>
+    <button class="linkbtn" onclick="BILL.lines.push({itemId:'',desc:'',acc:defExpense(),qty:1,price:''});renderBillLines()">+ Add line</button>
+    <div class="rep-line total" style="margin-top:14px"><span>Total</span><span class="n" id="blTotal">$0.00</span></div>
+    <div class="tag-note" id="blBase"></div>
+  </div>
+  <div class="modal-f">${id?`<button class="btn danger" onclick="voidBill('${id}')">Void</button>`:''}<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveBill('${id||''}')">${id?'Save':'Save bill'}</button></div>`,true);
+  renderBillLines();
+}
+function billRateChanged(){const cur=$('#blCur').value;window.BILL.currency=cur;const rEl=$('#blRate');rEl.disabled=cur===baseCur();rEl.value=cur===baseCur()?1:curRate(cur);window.BILL.rate=cur===baseCur()?1:curRate(cur);billCalc();}
+function billPickItem(ix,itemId){const it=item(itemId);const l=window.BILL.lines[ix];l.itemId=itemId;if(it){l.desc=it.name;l.acc=it.type==='inventory'?(it.assetAcc||INVASSET().id):(it.cogsAcc||defExpense());l.price=it.cost;if(!(+l.qty))l.qty=1;}renderBillLines();}
+function renderBillLines(){const accts=S.accounts.filter(a=>a.type==='expense'||a.type==='asset'||a.type==='liability');const cur=window.BILL.currency||baseCur();
+  $('#billLines').innerHTML=window.BILL.lines.map((l,ix)=>{const amt=round2((+l.qty||0)*(+l.price||0));const it=item(l.itemId);return `<tr>
+    <td><select onchange="billPickItem(${ix},this.value)"><option value="">— custom —</option>${S.items.map(x=>`<option value="${x.id}" ${l.itemId===x.id?'selected':''}>${esc(x.name)}${x.type==='inventory'?' ('+(+x.qty||0)+')':''}</option>`).join('')}</select></td>
+    <td><input value="${esc(l.desc)}" oninput="BILL.lines[${ix}].desc=this.value" placeholder="Description"></td>
+    <td><select onchange="BILL.lines[${ix}].acc=this.value" ${it&&it.type==='inventory'?'disabled title="Inventory items post to Inventory Asset"':''}>${accts.map(a=>`<option value="${a.id}" ${l.acc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></td>
+    <td class="num"><input class="num" value="${l.qty}" oninput="BILL.lines[${ix}].qty=this.value;billCalc()" style="text-align:right"></td>
+    <td class="num"><input class="num" value="${l.price}" oninput="BILL.lines[${ix}].price=this.value;billCalc()" placeholder="0.00" style="text-align:right"></td>
+    <td class="num strong">${fx(amt,cur)}</td>
+    <td style="width:26px"><button class="del-li" onclick="BILL.lines.splice(${ix},1);renderBillLines()">×</button></td></tr>`;}).join('');
+  billCalc();}
+function billCalc(){const cur=window.BILL.currency||baseCur();const t=round2(window.BILL.lines.reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0));const el=$('#blTotal');if(el)el.textContent=fx(t,cur);const b=$('#blBase');if(b)b.innerHTML=cur!==baseCur()?`≈ ${money(round2(t*(+window.BILL.rate||1)))} ${baseCur()} at rate ${window.BILL.rate}`:'';}
+function billApplyStock(bl){for(const l of bl.lines){const it=item(l.itemId);if(it&&it.type==='inventory'){it.qty=round2((+it.qty||0)+(+l.qty||0));it.cost=+l.price||it.cost;}}}
+function billUnapplyStock(bl){for(const l of bl.lines){const it=item(l.itemId);if(it&&it.type==='inventory')it.qty=round2((+it.qty||0)-(+l.qty||0));}}
+function saveBill(id){
+  const bl=window.BILL;bl.vendorId=$('#blVend').value;bl.date=$('#blDate').value;bl.due=$('#blDue').value;bl.num=$('#blNum').value.trim();
+  if($('#blCur')){bl.currency=$('#blCur').value;bl.rate=bl.currency===baseCur()?1:round2(+($('#blRate').value)||curRate(bl.currency));}else{bl.currency=baseCur();bl.rate=1;}
+  const cleanLines=bl.lines.map(normLine).filter(l=>l.amount!==0);
+  if(!cleanLines.length){toast('Add at least one line');return;}
+  const rate=bl.rate||1;const curTag=bl.currency!==baseCur()?' ['+bl.currency+' @'+rate+']':'';
+  let apCredit=0;const jlines=[];
+  for(const l of cleanLines){const base=round2(l.amount*rate);apCredit=round2(apCredit+base);jlines.push({acc:l.acc,debit:base,credit:0,name:l.desc});}
+  jlines.push({acc:AP().id,debit:0,credit:apCredit,name:vendName(bl.vendorId)});
+  if(id){const ex=S.bills.find(x=>x.id===id);billUnapplyStock(ex);removeJE(ex.jeId);
+    const je=post({date:bl.date,memo:'Bill — '+vendName(bl.vendorId)+(bl.num?' #'+bl.num:'')+curTag,ref:bl.num?'BILL#'+bl.num:'',source:'bill',lines:jlines});
+    Object.assign(ex,{vendorId:bl.vendorId,date:bl.date,due:bl.due,num:bl.num,currency:bl.currency,rate,lines:cleanLines,jeId:je.id});
+    billApplyStock(ex);
+  }else{
+    const je=post({date:bl.date,memo:'Bill — '+vendName(bl.vendorId)+(bl.num?' #'+bl.num:'')+curTag,ref:bl.num?'BILL#'+bl.num:'',source:'bill',lines:jlines});
+    const rec={id:uid('bill_'),num:bl.num,vendorId:bl.vendorId,date:bl.date,due:bl.due,currency:bl.currency,rate,lines:cleanLines,payments:[],jeId:je.id,void:false};
+    S.bills.push(rec);billApplyStock(rec);
+  }
+  save();closeModal();render();toast('Bill saved');
+}
+function viewBill(id){const b=S.bills.find(x=>x.id===id);const[st,cls]=billStatus(b);const cur=b.currency||baseCur();const fc=cur!==baseCur();
+  let pays=(b.payments||[]).map(p=>`<div class="rep-line sub"><span>${fmtDate(p.date)} · Paid from ${esc(acc(p.acc)?acc(p.acc).name:'')}</span><span class="n">${fx(p.amount,cur)}</span></div>`).join('');
+  openModal(`<div class="modal-h"><h3>Bill — ${esc(vendName(b.vendorId))}${b.num?' #'+esc(b.num):''}</h3><span class="badge ${cls}" style="margin-left:10px">${st}</span>${fc?`<span class="badge b-gray" style="margin-left:6px">${cur} @ ${b.rate}</span>`:''}<button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <table><thead><tr><th>Description</th><th>Account</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody>
+    ${b.lines.map(l=>`<tr><td>${esc(l.desc||'—')}</td><td class="muted">${esc(acc(l.acc)?acc(l.acc).name:'')}</td><td class="num muted">${l.qty!=null?l.qty:''}</td><td class="num">${fx(l.amount,cur)}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="rep-line head"><span>Total</span><span class="n">${fx(billTotal(b),cur)}</span></div>${pays}
+    <div class="rep-line total"><span>Balance</span><span class="n">${fx(billBalance(b),cur)}</span></div>
+  </div>
+  <div class="modal-f">${!b.void?`<button class="btn" onclick="editBill('${b.id}')">Edit</button>`:''}${!b.void&&billBalance(b)>0.005?`<button class="btn primary" onclick="payBill('${b.id}')">Pay bill</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`,true);
+}
+function payBill(id){const b=S.bills.find(x=>x.id===id);const bal=billBalance(b);const cur=b.currency||baseCur();const fc=cur!==baseCur();const banks=S.accounts.filter(a=>a.cash||a.type==='liability'&&/credit/i.test(a.name));
+  openModal(`<div class="modal-h"><h3>Pay bill — ${esc(vendName(b.vendorId))}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b"><div class="row3">
+    <div><label class="f">Date</label><input type="date" id="bpDate" value="${today()}"></div>
+    <div><label class="f">Amount (${cur})</label><input id="bpAmt" class="num" value="${bal.toFixed(2)}" style="text-align:right"></div>
+    <div><label class="f">Pay from</label><select id="bpAcc">${banks.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
+  </div>${fc?`<div class="fld"><label class="f">Exchange rate at payment (1 ${cur} = ? ${baseCur()})</label><input id="bpRate" class="num" value="${b.rate}" style="text-align:right"></div>`:''}<div class="tag-note">Balance: ${fx(bal,cur)}</div></div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doPayBill('${id}')">Record payment</button></div>`);
+}
+function doPayBill(id){const b=S.bills.find(x=>x.id===id);const cur=b.currency||baseCur();const amt=round2(+$('#bpAmt').value||0),date=$('#bpDate').value,accId=$('#bpAcc').value;
+  if(amt<=0){toast('Enter an amount');return;}
+  const payRate=$('#bpRate')?round2(+$('#bpRate').value||b.rate):(b.rate||1);const billRate=b.rate||1;
+  const baseCash=round2(amt*payRate);const apRelief=round2(amt*billRate);const diff=round2(apRelief-baseCash);
+  const lines=[{acc:AP().id,debit:apRelief,credit:0,name:vendName(b.vendorId)},{acc:accId,debit:0,credit:baseCash,name:vendName(b.vendorId)}];
+  if(Math.abs(diff)>0.005){if(diff>0)lines.push({acc:FXACC().id,debit:0,credit:diff,name:'FX gain'});else lines.push({acc:FXACC().id,debit:-diff,credit:0,name:'FX loss'});}
+  const je=post({date,memo:'Bill payment — '+vendName(b.vendorId)+(cur!==baseCur()?' ['+cur+']':''),ref:b.num?'BILL#'+b.num:'',source:'billpay',lines});
+  b.payments=b.payments||[];b.payments.push({id:uid('bp_'),date,amount:amt,rate:payRate,acc:accId,jeId:je.id});
+  save();closeModal();render();toast('Payment recorded');}
+function voidBill(id){const b=S.bills.find(x=>x.id===id);if((b.payments||[]).length){toast('Remove payments first');return;}billUnapplyStock(b);removeJE(b.jeId);b.void=true;save();closeModal();render();toast('Bill voided');}
+
+// Quick expense: money already spent, paid directly from a bank/credit account
+function newExpense(){
+  const banks=S.accounts.filter(a=>a.cash||(a.type==='liability'&&/credit/i.test(a.name)));
+  const exps=S.accounts.filter(a=>a.type==='expense');
+  openModal(`<div class="modal-h"><h3>Quick expense</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row"><div><label class="f">Date</label><input type="date" id="exDate" value="${today()}"></div>
+    <div><label class="f">Paid from</label><select id="exPaid">${banks.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div></div>
+    <div class="row"><div><label class="f">Category</label><select id="exCat">${exps.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
+    <div><label class="f">Amount</label><input id="exAmt" class="num" placeholder="0.00" style="text-align:right"></div></div>
+    <div class="fld"><label class="f">Payee / memo</label><input id="exMemo" placeholder="e.g. Staples — printer paper"></div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveExpense()">Save expense</button></div>`);
+}
+function saveExpense(){const amt=round2(+$('#exAmt').value||0);if(amt<=0){toast('Enter an amount');return;}
+  const date=$('#exDate').value,paid=$('#exPaid').value,cat=$('#exCat').value,memo=$('#exMemo').value.trim();
+  post({date,memo:memo||'Expense',source:'expense',lines:[{acc:cat,debit:amt,credit:0,name:memo},{acc:paid,debit:0,credit:amt,name:memo}]});
+  save();closeModal();render();toast('Expense recorded');}
+
+/* ============================================================ JOURNAL */
+function renderJournal(){
+  setHead('Journal','All posted transactions · '+S.journal.length+' entries',
+    `<button class="btn primary" onclick="newJournalEntry()">+ Journal entry</button>`);
+  let v=`<div class="toolbar"><input class="search" id="jSearch" placeholder="Search memo / account…" oninput="renderJournalRows()"><select id="jType" onchange="renderJournalRows()"><option value="">All types</option>${['invoice','payment','bill','billpay','expense','bankimport','journal','opening'].map(t=>`<option value="${t}">${sourceLabel(t)}</option>`).join('')}</select></div>
+  <div class="panel"><div class="panel-b" id="jBody"></div></div>`;
+  $('#view').innerHTML=v;renderJournalRows();
+}
+function renderJournalRows(){
+  const q=($('#jSearch').value||'').toLowerCase();const ty=$('#jType').value;
+  let list=[...S.journal].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
+  if(ty)list=list.filter(j=>j.source===ty);
+  if(q)list=list.filter(j=>(j.memo||'').toLowerCase().includes(q)||j.lines.some(l=>acc(l.acc)&&acc(l.acc).name.toLowerCase().includes(q)));
+  let v=`<table><thead><tr><th style="width:80px">Date</th><th>Memo / Account</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead><tbody>`;
+  if(!list.length)v+=`<tr><td colspan="6" class="empty">No entries</td></tr>`;
+  for(const je of list){
+    v+=`<tr><td class="muted">${fmtDate(je.date)}</td><td class="strong">${esc(je.memo||sourceLabel(je.source))}</td><td><span class="badge b-gray">${sourceLabel(je.source)}</span></td><td></td><td></td><td class="num">${je.source==='journal'?`<button class="btn sm ghost" onclick="deleteManualJE('${je.id}')">Delete</button>`:''}</td></tr>`;
+    for(const l of je.lines){const a=acc(l.acc);
+      v+=`<tr><td></td><td class="${l.credit?'':'strong'}" style="padding-left:${l.debit?'34':'54'}px;color:${l.debit?'var(--ink)':'var(--muted)'}">${a?esc(a.code+' · '+a.name):'?'}${l.name?` <span class="muted">(${esc(l.name)})</span>`:''}</td><td></td><td class="num">${l.debit?money(l.debit):''}</td><td class="num">${l.credit?money(l.credit):''}</td><td></td></tr>`;}
+  }
+  v+=`</tbody></table>`;
+  $('#jBody').innerHTML=v;
+}
+function newJournalEntry(){
+  window.JE={date:today(),memo:'',lines:[{acc:S.accounts[0].id,debit:'',credit:''},{acc:S.accounts[1].id,debit:'',credit:''}]};
+  openModal(jeModalHTML(),true);renderJELines();
+}
+function jeModalHTML(){return `<div class="modal-h"><h3>New journal entry</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row"><div><label class="f">Date</label><input type="date" id="jeDate" value="${window.JE.date}"></div><div><label class="f">Memo</label><input id="jeMemo" value="${esc(window.JE.memo)}" placeholder="Description"></div></div>
+    <table class="li-tbl"><thead><tr><th style="width:230px">Account</th><th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead><tbody id="jeLines"></tbody></table>
+    <button class="linkbtn" onclick="JE.lines.push({acc:S.accounts[0].id,debit:'',credit:''});renderJELines()">+ Add line</button>
+    <div class="rep-line total" style="margin-top:12px"><span>Totals</span><span class="n" id="jeTot">$0.00 / $0.00</span></div>
+    <div id="jeWarn" class="tag-note"></div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveJE()">Post entry</button></div>`;}
+function renderJELines(){
+  $('#jeLines').innerHTML=window.JE.lines.map((l,ix)=>`<tr>
+    <td><select onchange="JE.lines[${ix}].acc=this.value">${S.accounts.map(a=>`<option value="${a.id}" ${l.acc===a.id?'selected':''}>${esc(a.code+' · '+a.name)}</option>`).join('')}</select></td>
+    <td class="num" style="width:110px"><input class="num" value="${l.debit}" oninput="JE.lines[${ix}].debit=this.value;JE.lines[${ix}].credit='';jeCalc()" style="text-align:right" placeholder="0.00"></td>
+    <td class="num" style="width:110px"><input class="num" value="${l.credit}" oninput="JE.lines[${ix}].credit=this.value;JE.lines[${ix}].debit='';jeCalc()" style="text-align:right" placeholder="0.00"></td>
+    <td style="width:26px"><button class="del-li" onclick="JE.lines.splice(${ix},1);renderJELines()">×</button></td></tr>`).join('');
+  jeCalc();
+}
+function jeCalc(){const d=round2(window.JE.lines.reduce((s,l)=>s+(+l.debit||0),0));const c=round2(window.JE.lines.reduce((s,l)=>s+(+l.credit||0),0));
+  $('#jeTot').textContent=money(d)+' / '+money(c);
+  $('#jeWarn').innerHTML=Math.abs(d-c)<0.005?'<span class="pos">✓ Balanced</span>':`<span class="neg">Out of balance by ${money(Math.abs(d-c))}</span>`;}
+function saveJE(){window.JE.date=$('#jeDate').value;window.JE.memo=$('#jeMemo').value.trim();
+  const lines=window.JE.lines.filter(l=>(+l.debit||0)!==0||(+l.credit||0)!==0).map(l=>({acc:l.acc,debit:+l.debit||0,credit:+l.credit||0}));
+  const d=round2(lines.reduce((s,l)=>s+l.debit,0)),c=round2(lines.reduce((s,l)=>s+l.credit,0));
+  if(!lines.length){toast('Add lines');return;}
+  if(Math.abs(d-c)>0.005){toast('Entry is not balanced');return;}
+  try{post({date:window.JE.date,memo:window.JE.memo,source:'journal',lines});}catch(e){toast(e.message);return;}
+  save();closeModal();render();toast('Entry posted');}
+function deleteManualJE(id){removeJE(id);save();render();toast('Entry deleted');}
+
+/* ============================================================ REPORTS */
+let repState={type:'pl',from:today().slice(0,4)+'-01-01',to:today()};
+function renderReports(){
+  setHead('Financial Reports','','');
+  let v=`<div class="toolbar">
+    ${[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['gl','General Ledger'],['ar','A/R Aging'],['ap','A/P Aging']].map(([k,l])=>`<button class="pill ${repState.type===k?'on':''}" onclick="repState.type='${k}';drawReport()">${l}</button>`).join('')}
+    <span class="spacer" style="flex:1"></span>
+    <label class="f" style="margin:0">From</label><input type="date" id="rFrom" value="${repState.from}" onchange="repState.from=this.value;drawReport()">
+    <label class="f" style="margin:0">To</label><input type="date" id="rTo" value="${repState.to}" onchange="repState.to=this.value;drawReport()">
+    <button class="btn sm" onclick="printReport()">🖨 Print</button>
+  </div><div id="repOut"></div>`;
+  $('#view').innerHTML=v;drawReport();
+}
+function drawReport(){
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+  const idx={pl:0,bs:1,tb:2,gl:3,ar:4,ap:5}[repState.type];
+  document.querySelectorAll('.pill')[idx]&&document.querySelectorAll('.pill')[idx].classList.add('on');
+  $('#repOut').innerHTML={pl:reportPL,bs:reportBS,tb:reportTB,gl:reportGL,ar:reportAging.bind(null,'ar'),ap:reportAging.bind(null,'ap')}[repState.type]();
+}
+function repHead(title,sub){return `<div class="panel"><div class="pad report"><div style="text-align:center;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:8px"><div style="font-size:18px;font-weight:700">${esc(S.company.name)}</div><div style="font-size:15px;font-weight:600">${title}</div><div class="muted" style="font-size:12px">${sub}</div></div>`;}
+function reportPL(){
+  const {from,to}=repState;
+  let html=repHead('Profit &amp; Loss',fmtDate(from)+' – '+fmtDate(to));
+  let incTot=0,expTot=0;
+  html+=`<div class="rep-line head"><span>Income</span><span></span></div>`;
+  for(const a of S.accounts.filter(a=>a.type==='income').sort((x,y)=>x.code<y.code?-1:1)){const bal=-sumRange(a.id,from,to);if(Math.abs(bal)<0.005)continue;incTot+=bal;html+=`<div class="rep-line sub"><span>${esc(a.name)}</span><span class="n">${money(bal)}</span></div>`;}
+  html+=`<div class="rep-line" style="font-weight:700"><span>Total Income</span><span class="n">${money(incTot)}</span></div>`;
+  html+=`<div class="rep-line head" style="margin-top:14px"><span>Expenses</span><span></span></div>`;
+  for(const a of S.accounts.filter(a=>a.type==='expense').sort((x,y)=>x.code<y.code?-1:1)){const bal=sumRange(a.id,from,to);if(Math.abs(bal)<0.005)continue;expTot+=bal;html+=`<div class="rep-line sub"><span>${esc(a.name)}</span><span class="n">${money(bal)}</span></div>`;}
+  html+=`<div class="rep-line" style="font-weight:700"><span>Total Expenses</span><span class="n">${money(expTot)}</span></div>`;
+  const ni=round2(incTot-expTot);
+  html+=`<div class="rep-line total"><span>Net Income</span><span class="n ${ni>=0?'pos':'neg'}">${money(ni)}</span></div>`;
+  return html+`</div></div>`;
+}
+function reportBS(){
+  const {to}=repState;
+  let html=repHead('Balance Sheet','As of '+fmtDate(to));
+  const grp=t=>S.accounts.filter(a=>a.type===t).sort((x,y)=>x.code<y.code?-1:1);
+  let aTot=0,lTot=0,eTot=0;
+  html+=`<div class="rep-line head"><span>Assets</span><span></span></div>`;
+  for(const a of grp('asset')){const b=natBalance(a,to);if(Math.abs(b)<0.005)continue;aTot+=b;html+=`<div class="rep-line sub"><span>${esc(a.name)}</span><span class="n">${money(b)}</span></div>`;}
+  html+=`<div class="rep-line" style="font-weight:700"><span>Total Assets</span><span class="n">${money(aTot)}</span></div>`;
+  html+=`<div class="rep-line head" style="margin-top:14px"><span>Liabilities</span><span></span></div>`;
+  for(const a of grp('liability')){const b=natBalance(a,to);if(Math.abs(b)<0.005)continue;lTot+=b;html+=`<div class="rep-line sub"><span>${esc(a.name)}</span><span class="n">${money(b)}</span></div>`;}
+  html+=`<div class="rep-line" style="font-weight:700"><span>Total Liabilities</span><span class="n">${money(lTot)}</span></div>`;
+  html+=`<div class="rep-line head" style="margin-top:14px"><span>Equity</span><span></span></div>`;
+  for(const a of grp('equity')){const b=natBalance(a,to);if(Math.abs(b)<0.005)continue;eTot+=b;html+=`<div class="rep-line sub"><span>${esc(a.name)}</span><span class="n">${money(b)}</span></div>`;}
+  // Net income (current period, from start of fiscal year to 'to') as retained/current earnings
+  const fyStart=to.slice(0,4)+'-'+S.company.fyStart;
+  const ni=netIncome(fyStart,to);
+  eTot+=ni;
+  html+=`<div class="rep-line sub"><span>Net Income (current period)</span><span class="n">${money(ni)}</span></div>`;
+  html+=`<div class="rep-line" style="font-weight:700"><span>Total Equity</span><span class="n">${money(eTot)}</span></div>`;
+  const le=round2(lTot+eTot);
+  html+=`<div class="rep-line total"><span>Total Liabilities &amp; Equity</span><span class="n">${money(le)}</span></div>`;
+  const diff=round2(aTot-le);
+  html+=`<div class="rep-line" style="margin-top:6px"><span class="muted">Balance check</span><span class="n ${Math.abs(diff)<0.005?'pos':'neg'}">${Math.abs(diff)<0.005?'✓ In balance':'Off by '+money(diff)}</span></div>`;
+  return html+`</div></div>`;
+}
+function reportTB(){
+  const {to}=repState;
+  let html=repHead('Trial Balance','As of '+fmtDate(to));
+  html+=`<table style="margin-top:8px"><thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>`;
+  let dT=0,cT=0;
+  for(const a of [...S.accounts].sort((x,y)=>x.code<y.code?-1:1)){
+    const raw=rawBalance(a.id,to);if(Math.abs(raw)<0.005)continue;
+    const d=raw>0?raw:0,c=raw<0?-raw:0;dT+=d;cT+=c;
+    html+=`<tr><td>${esc(a.code+' · '+a.name)}</td><td class="num">${d?money(d):''}</td><td class="num">${c?money(c):''}</td></tr>`;
+  }
+  html+=`<tr class="totrow"><td>Totals</td><td class="num">${money(dT)}</td><td class="num">${money(cT)}</td></tr>`;
+  html+=`</tbody></table>`;
+  return html+`</div></div>`;
+}
+function reportGL(){
+  const {from,to}=repState;
+  let html=repHead('General Ledger',fmtDate(from)+' – '+fmtDate(to));
+  for(const a of [...S.accounts].sort((x,y)=>x.code<y.code?-1:1)){
+    const rows=accountLines(a.id).filter(r=>r.je.date>=from&&r.je.date<=to);
+    const opening=rawBalance(a.id,prevDay(from));
+    if(!rows.length&&Math.abs(opening)<0.005)continue;
+    html+=`<div class="rep-line head" style="margin-top:16px"><span>${esc(a.code+' · '+a.name)}</span><span class="n muted">Opening ${money(isDebitNormal(a.type)?opening:-opening)}</span></div>`;
+    html+=`<table><thead><tr><th style="width:80px">Date</th><th>Memo</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>`;
+    let run=opening;
+    for(const r of rows){run+=r.line.debit-r.line.credit;
+      html+=`<tr><td class="muted">${fmtDate(r.je.date)}</td><td>${esc(r.je.memo||sourceLabel(r.je.source))}</td><td class="num">${r.line.debit?money(r.line.debit):''}</td><td class="num">${r.line.credit?money(r.line.credit):''}</td><td class="num strong">${money(isDebitNormal(a.type)?run:-run)}</td></tr>`;}
+    html+=`</tbody></table>`;
+  }
+  return html+`</div></div>`;
+}
+function reportAging(which){
+  const isAR=which==='ar';
+  const items=isAR?S.invoices.filter(i=>!i.void&&invBalance(i)>0.005):S.bills.filter(b=>!b.void&&billBalance(b)>0.005);
+  let html=repHead(isAR?'A/R Aging Summary':'A/P Aging Summary','As of '+fmtDate(today()));
+  const buckets={'Current':0,'1–30':0,'31–60':0,'61–90':0,'90+':0};
+  const rows=items.map(it=>{
+    const bal=isAR?round2(invBalance(it)*(it.rate||1)):round2(billBalance(it)*(it.rate||1));
+    const due=it.due||it.date;const days=Math.floor((new Date(today())-new Date(due))/864e5);
+    let b= days<=0?'Current':days<=30?'1–30':days<=60?'31–60':days<=90?'61–90':'90+';
+    buckets[b]+=bal;
+    return {name:isAR?custName(it.customerId):vendName(it.vendorId),num:it.num,due,bal,b};
+  });
+  html+=`<table style="margin-top:8px"><thead><tr><th>${isAR?'Customer':'Vendor'}</th><th>Due</th><th>Age</th><th class="num">Balance</th></tr></thead><tbody>`;
+  if(!rows.length)html+=`<tr><td colspan="4" class="empty">Nothing outstanding 🎉</td></tr>`;
+  for(const r of rows.sort((a,b)=>a.due<b.due?-1:1))html+=`<tr><td class="strong">${esc(r.name)} <span class="muted">#${r.num}</span></td><td class="muted">${fmtDate(r.due)}</td><td><span class="badge ${r.b==='Current'?'b-gray':r.b==='90+'?'b-red':'b-amber'}">${r.b}</span></td><td class="num strong">${money(r.bal)}</td></tr>`;
+  html+=`</tbody></table>`;
+  html+=`<div class="rep-line head" style="margin-top:14px"><span>By age</span><span></span></div>`;
+  let tot=0;for(const k in buckets){tot+=buckets[k];html+=`<div class="rep-line sub"><span>${k} days</span><span class="n">${money(buckets[k])}</span></div>`;}
+  html+=`<div class="rep-line total"><span>Total ${isAR?'receivable':'payable'}</span><span class="n">${money(tot)}</span></div>`;
+  return html+`</div></div>`;
+}
+function prevDay(d){const dt=new Date(d+'T00:00:00');dt.setDate(dt.getDate()-1);return dt.toISOString().slice(0,10);}
+function printReport(){const html=$('#repOut').innerHTML;const w=window.open('','_blank');w.document.write(`<html><head><title>Report</title><style>body{font-family:-apple-system,Arial,sans-serif;padding:30px;color:#1a2230}.rep-line{display:flex;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #eee}.rep-line.head{font-weight:700;border-bottom:1px solid #333;margin-top:10px}.rep-line.total{font-weight:700;border-top:2px solid #333}.rep-line.sub{padding-left:22px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eee}.num{text-align:right}.pos{color:#1f9d63}.neg{color:#d64545}.muted{color:#888}.panel,.pad{padding:0}</style></head><body>${html}</body></html>`);w.document.close();w.print();}
+
+/* ============================================================ RECONCILE */
+let recState={acc:null,ending:'',date:today()};
+function renderReconcile(){
+  const banks=S.accounts.filter(a=>a.cash||(a.type==='liability'&&/credit/i.test(a.name)));
+  setHead('Bank Reconciliation','Match your records to a statement','');
+  if(!banks.length){$('#view').innerHTML=`<div class="panel"><div class="empty"><div class="big">✓</div>Mark an account as a bank/cash account in the Chart of Accounts to reconcile it.</div></div>`;return;}
+  if(!recState.acc)recState.acc=banks[0].id;
+  const a=acc(recState.acc);
+  const bookBal=natBalance(a);
+  let v=`<div class="panel"><div class="pad"><div class="row3">
+    <div><label class="f">Account</label><select onchange="recState.acc=this.value;renderReconcile()">${banks.map(b=>`<option value="${b.id}" ${recState.acc===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+    <div><label class="f">Statement ending date</label><input type="date" value="${recState.date}" onchange="recState.date=this.value"></div>
+    <div><label class="f">Statement ending balance</label><input class="num" id="recEnd" value="${recState.ending}" oninput="recState.ending=this.value;updateRecon()" placeholder="0.00" style="text-align:right"></div>
+  </div></div></div>`;
+
+  // transactions hitting this account
+  const rows=accountLines(recState.acc);
+  let clearedBal=0;
+  v+=`<div class="panel"><div class="panel-h"><h2>Transactions</h2><span class="sub">Tick items that appear on your statement</span></div><div class="panel-b"><table><thead><tr><th style="width:44px">Clear</th><th>Date</th><th>Memo</th><th class="num">Payment</th><th class="num">Deposit</th></tr></thead><tbody>`;
+  if(!rows.length)v+=`<tr><td colspan="5" class="empty">No transactions in this account</td></tr>`;
+  for(const r of rows){const amt=r.line.debit-r.line.credit;const signNat=isDebitNormal(a.type)?amt:-amt;
+    v+=`<tr class="${r.line.cleared?'hl':''}"><td><input type="checkbox" class="chk" ${r.line.cleared?'checked':''} onchange="toggleClear('${r.je.id}','${r.line.acc}',${rows.indexOf(r)},this.checked)"></td>
+    <td class="muted">${fmtDate(r.je.date)}</td><td>${esc(r.je.memo||sourceLabel(r.je.source))}</td>
+    <td class="num">${r.line.credit?money(r.line.credit):''}</td><td class="num">${r.line.debit?money(r.line.debit):''}</td></tr>`;}
+  v+=`</tbody></table></div></div>`;
+
+  // summary
+  v+=`<div class="panel"><div class="pad" id="recSummary"></div></div>`;
+  $('#view').innerHTML=v;updateRecon();
+}
+function toggleClear(jeId,accId,ix,val){
+  const je=S.journal.find(j=>j.id===jeId);
+  // find the specific line among this account's lines by order
+  const rows=accountLines(accId);const r=rows[ix];if(r)r.line.cleared=val;
+  save();updateRecon();
+  // update row highlight
+  renderReconcile();
+}
+function updateRecon(){
+  const a=acc(recState.acc);
+  const rows=accountLines(recState.acc);
+  let clearedNat=0;
+  for(const r of rows)if(r.line.cleared)clearedNat+=(r.line.debit-r.line.credit);
+  clearedNat=isDebitNormal(a.type)?clearedNat:-clearedNat;
+  const ending=round2(+recState.ending||0);
+  const diff=round2(ending-clearedNat);
+  const bookBal=natBalance(a);
+  const el=$('#recSummary');if(!el)return;
+  el.innerHTML=`<div class="split"><div>
+      <div class="rep-line"><span class="muted">Cleared balance (ticked items)</span><span class="n strong">${money(clearedNat)}</span></div>
+      <div class="rep-line"><span class="muted">Statement ending balance</span><span class="n strong">${money(ending)}</span></div>
+      <div class="rep-line total"><span>Difference</span><span class="n ${Math.abs(diff)<0.005?'pos':'neg'}">${money(diff)}</span></div>
+      <div class="rep-line"><span class="muted">Book balance (all transactions)</span><span class="n">${money(bookBal)}</span></div>
+    </div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div class="recon-diff ${Math.abs(diff)<0.005?'pos':'neg'}">${Math.abs(diff)<0.005?'✓ Reconciled':money(diff)}</div>
+      <div class="muted" style="margin:8px 0 14px">${Math.abs(diff)<0.005?'Cleared items match the statement.':'Keep ticking items until the difference is $0.00.'}</div>
+      <button class="btn primary" ${Math.abs(diff)<0.005?'':'disabled style=opacity:.5'} onclick="finishRecon()">Finish reconciliation</button>
+    </div></div>`;
+}
+function finishRecon(){
+  S.recons.push({id:uid('rec_'),acc:recState.acc,statementDate:recState.date,ending:round2(+recState.ending||0),reconciledAt:today()});
+  recState.ending='';save();toast('Reconciliation saved ✓');renderReconcile();
+}
+
+/* ============================================================ SETTINGS */
+function renderSettings(){
+  setHead('Settings','','');
+  const j=S.journal.length;
+  const sy=S.sync||{};
+  let v=`<div class="panel"><div class="panel-h"><h2>Company</h2></div><div class="pad">
+    <div class="row3"><div><label class="f">Company name</label><input id="stName" value="${esc(S.company.name)}"></div>
+    <div><label class="f">Fiscal year starts (MM-DD)</label><input id="stFY" value="${esc(S.company.fyStart)}" placeholder="01-01"></div>
+    <div><label class="f">Base currency</label><input id="stBase" value="${esc(baseCur())}" maxlength="3" style="text-transform:uppercase"></div></div>
+    <button class="btn primary" onclick="saveSettings()">Save</button></div></div>
+
+    <div class="panel"><div class="panel-h"><h2>Foreign currencies</h2><span class="sub">rates vs ${baseCur()}${S.company.ratesUpdated?' · updated '+esc(S.company.ratesUpdated):''}</span><span class="spacer" style="flex:1"></span><button class="btn sm" onclick="fetchRates()">↻ Update live rates</button><button class="btn sm" onclick="addCurrency()">+ Add currency</button></div><div class="panel-b"><table><thead><tr><th>Code</th><th class="num">1 unit = ? ${baseCur()}</th><th style="width:80px"></th></tr></thead><tbody>`;
+  if(!S.currencies.length)v+=`<tr><td colspan="3" class="empty">No foreign currencies. Add one to invoice or bill in another currency.</td></tr>`;
+  for(const c of S.currencies)v+=`<tr><td class="strong">${esc(c.code)} ${curSym(c.code)}</td><td class="num"><input class="num" value="${c.rate}" style="text-align:right;max-width:140px" onchange="setCurRate('${c.code}',this.value)"></td><td class="num"><button class="btn sm ghost danger" onclick="delCurrency('${c.code}')">Remove</button></td></tr>`;
+  v+=`</tbody></table><div class="pad"><label class="flex" style="font-size:13px;font-weight:600"><input type="checkbox" class="chk" style="width:auto" ${S.company.autoRates?'checked':''} onchange="toggleAutoRates(this.checked)"> Auto-refresh rates when the app opens</label><div class="tag-note">Live mid-market rates from the free open.er-api.com feed (no key needed). Requires an internet connection.</div></div></div>
+
+    <div class="panel"><div class="panel-h"><h2>Cloud sync <span class="badge ${sy.token?'b-green':'b-gray'}">${sy.token?'signed in':'offline'}</span>${sy.token&&sy.role?` <span class="badge ${sy.role==='viewer'?'b-gray':'b-blue'}">${sy.role}</span>`:''}</h2><span class="sub" id="syncStatus">${sy.dirty?'unsynced changes':(sy.token?'multi-user sync':'multi-device backup')}</span></div><div class="pad">
+    <div class="row3"><div><label class="f">Server URL</label><input id="syUrl" value="${esc(sy.url||'')}" placeholder="http://localhost:4000"></div>
+      <div><label class="f">Email</label><input id="syEmail" value="${esc(sy.email||'')}" placeholder="you@company.com"></div>
+      <div><label class="f">Password</label><input id="syPass" type="password" placeholder="${sy.token?'•••••• (signed in)':'password'}"></div></div>
+    ${sy.token?`
+    <div class="row"><div><label class="f">Active company / books</label><select onchange="switchCompany(this.value)">${(sy.companies||[]).map(c=>`<option value="${c.id}" ${c.id===sy.companyId?'selected':''}>${esc(c.name)} — ${c.role}</option>`).join('')||`<option>${esc(sy.companyName||'—')}</option>`}</select></div>
+      <div style="display:flex;align-items:flex-end;gap:8px"><button class="btn" onclick="createCompanyPrompt()">+ New company</button>${['owner','admin'].includes(sy.role)?`<button class="btn" onclick="showMembers()">👥 Members</button>`:''}</div></div>
+    <div class="flex" style="flex-wrap:wrap;gap:10px;margin-bottom:10px">
+      ${canEdit()?`<button class="btn primary" onclick="syncPush()">⬆ Push now</button>`:'<span class="badge b-gray">read-only role</span>'}
+      <button class="btn" onclick="syncPull(true)">⬇ Pull now</button>
+      <button class="btn ghost" onclick="syncLogout()">Sign out</button>
+    </div>
+    <label class="flex" style="font-size:13px;font-weight:600"><input type="checkbox" class="chk" style="width:auto" ${sy.auto?'checked':''} onchange="toggleAutoSync(this.checked)"> Auto-sync — push edits automatically and pull others' changes in the background</label>
+    <div class="tag-note">${sy.lastPush?'Last pushed '+esc(sy.lastPush)+'. ':''}Signed in as ${esc(sy.email)}. Invite teammates from Members; give them viewer (read-only), member (edit), or admin (edit + manage).</div>
+    `:`
+    <div class="flex" style="flex-wrap:wrap;gap:10px">
+      <button class="btn" onclick="syncAuth('register')">Create account</button><button class="btn primary" onclick="syncAuth('login')">Sign in</button>
+    </div>
+    <div class="tag-note">Run the included LedgerBook server and point Server URL at it. Each company's books are shared with the members you invite, with per-person roles.</div>`}
+    </div></div>
+
+    <div class="panel"><div class="panel-h"><h2>Data</h2><span class="sub">${j} journal entries · saved in this browser</span></div><div class="pad">
+    <div class="flex" style="flex-wrap:wrap;gap:10px">
+      <button class="btn" onclick="exportData()">⬇ Export backup (JSON)</button>
+      <button class="btn" onclick="document.getElementById('impFile').click()">⬆ Import backup</button>
+      <input type="file" id="impFile" accept="application/json" style="display:none" onchange="importData(this)">
+      <button class="btn" onclick="loadDemo()">Load sample data</button>
+      <button class="btn danger" onclick="resetAll()">Reset everything</button>
+    </div>
+    <div class="tag-note">Your books live only in this browser on this device. Export a backup regularly, and to move to another computer.</div>
+    </div></div>
+
+    <div class="panel"><div class="panel-h"><h2>About</h2></div><div class="pad muted" style="line-height:1.6">
+    LedgerBook is a self-contained double-entry bookkeeping app. Every invoice, bill, payment and expense posts a balanced journal entry behind the scenes, so your Trial Balance, P&amp;L and Balance Sheet always tie out. There are no servers and no accounts — one HTML file, your data stored locally.</div></div>`;
+  $('#view').innerHTML=v;
+}
+function saveSettings(){S.company.name=$('#stName').value.trim()||'My Company';S.company.fyStart=$('#stFY').value.trim()||'01-01';const bc=($('#stBase').value.trim()||'USD').toUpperCase();S.company.baseCurrency=bc;S.currencies=S.currencies.filter(c=>c.code!==bc);save();render();toast('Saved');}
+function addCurrency(){const code=(prompt('3-letter currency code (e.g. EUR, GBP, CAD):')||'').trim().toUpperCase();if(!code)return;if(code===baseCur()){toast('That is the base currency');return;}if(S.currencies.some(c=>c.code===code)){toast('Already added');return;}const r=prompt('Exchange rate — 1 '+code+' = ? '+baseCur(),'1.00');S.currencies.push({code,rate:round2(+r||1)});save();render();toast(code+' added');}
+function setCurRate(code,val){const c=S.currencies.find(x=>x.code===code);if(c){c.rate=round2(+val||1);save();}}
+function delCurrency(code){S.currencies=S.currencies.filter(c=>c.code!==code);save();render();toast(code+' removed');}
+function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='ledgerbook-backup-'+today()+'.json';a.click();URL.revokeObjectURL(u);}
+function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.accounts||!d.journal)throw 0;S=d;save();render();toast('Backup imported');}catch(err){toast('Invalid backup file');}};r.readAsText(f);}
+function resetAll(){if(!confirm('Erase all data and start fresh?'))return;S=blankState();save();go('dashboard');toast('Reset complete');}
+
+/* ---------- Demo data ---------- */
+function loadDemo(){
+  if(S.journal.length&&!confirm('This adds sample data to your current books. Continue?'))return;
+  S.company.name='Northwind Coffee Roasters';
+  const c1={id:uid('p_'),name:'Blue Bottle Cafe',email:'ap@bluebottle.example'};
+  const c2={id:uid('p_'),name:'Corner Bakery',email:'orders@cornerbakery.example'};
+  const c3={id:uid('p_'),name:'Grandview Hotel',email:'purchasing@grandview.example'};
+  S.customers.push(c1,c2,c3);
+  const v1={id:uid('p_'),name:'Green Bean Importers',email:'billing@greenbean.example'};
+  const v2={id:uid('p_'),name:'City Power & Light',email:''};
+  const v3={id:uid('p_'),name:'Sunset Property Mgmt',email:''};
+  S.vendors.push(v1,v2,v3);
+  const checking=accByName(/Checking/i).id, sales=accByName(/Sales Revenue/i).id, svc=accByName(/Service Revenue/i).id;
+  const cogs=accByName(/Cost of Goods/i).id, rent=accByName(/Rent/i).id, util=accByName(/Utilities/i).id, sw=accByName(/Software/i).id, equity=accByName(/Owner's Equity/i).id, equip=accByName(/Equipment/i).id;
+  // opening capital
+  post({date:'2026-01-02',memo:'Owner capital contribution',source:'journal',lines:[{acc:checking,debit:25000,credit:0},{acc:equity,debit:0,credit:25000}]});
+  post({date:'2026-01-05',memo:'Purchased roasting equipment',source:'journal',lines:[{acc:equip,debit:8000,credit:0},{acc:checking,debit:0,credit:8000}]});
+  // invoices
+  const mkInv=(cust,date,due,lines)=>{const num=S.counters.inv++;const total=round2(lines.reduce((s,l)=>s+l.amount,0));const je=post({date,memo:'Invoice #'+num+' — '+cust.name,ref:'INV#'+num,source:'invoice',lines:[{acc:AR().id,debit:total,credit:0,name:cust.name},...lines.map(l=>({acc:l.acc,debit:0,credit:l.amount,name:l.desc}))]});return{id:uid('inv_'),num,customerId:cust.id,date,due,lines:lines.map(l=>({desc:l.desc,acc:l.acc,amount:l.amount})),payments:[],jeId:je.id,void:false};};
+  const i1=mkInv(c1,'2026-05-04','2026-06-03',[{desc:'Wholesale beans — 40 lb',acc:sales,amount:960},{desc:'Delivery',acc:svc,amount:40}]);
+  const i2=mkInv(c2,'2026-06-10','2026-07-10',[{desc:'House blend — 25 lb',acc:sales,amount:575}]);
+  const i3=mkInv(c3,'2026-06-28','2026-07-28',[{desc:'Espresso blend — 60 lb',acc:sales,amount:1560},{desc:'Barista training',acc:svc,amount:500}]);
+  const i4=mkInv(c1,'2026-07-08','2026-08-07',[{desc:'Single-origin — 30 lb',acc:sales,amount:900}]);
+  S.invoices.push(i1,i2,i3,i4);
+  // pay first two invoices
+  const payInv=(inv,date,amt)=>{const je=post({date,memo:'Payment received — Invoice #'+inv.num,ref:'INV#'+inv.num,source:'payment',lines:[{acc:checking,debit:amt,credit:0,name:custName(inv.customerId)},{acc:AR().id,debit:0,credit:amt,name:custName(inv.customerId)}]});inv.payments.push({id:uid('py_'),date,amount:amt,acc:checking,jeId:je.id});};
+  payInv(i1,'2026-05-30',1000);payInv(i2,'2026-07-05',575);
+  // bills
+  const mkBill=(vend,num,date,due,lines)=>{const total=round2(lines.reduce((s,l)=>s+l.amount,0));const je=post({date,memo:'Bill — '+vend.name+' #'+num,ref:'BILL#'+num,source:'bill',lines:[...lines.map(l=>({acc:l.acc,debit:l.amount,credit:0,name:l.desc})),{acc:AP().id,debit:0,credit:total,name:vend.name}]});return{id:uid('bill_'),num,vendorId:vend.id,date,due,lines:lines.map(l=>({desc:l.desc,acc:l.acc,amount:l.amount})),payments:[],jeId:je.id,void:false};};
+  const b1=mkBill(v1,'GB-3391','2026-05-12','2026-06-11',[{desc:'Green coffee — 200 lb',acc:cogs,amount:1400}]);
+  const b2=mkBill(v3,'JUN-RENT','2026-06-01','2026-06-05',[{desc:'Warehouse rent — June',acc:rent,amount:1800}]);
+  const b3=mkBill(v2,'JUL-ELEC','2026-07-02','2026-07-20',[{desc:'Electricity',acc:util,amount:320}]);
+  S.bills.push(b1,b2,b3);
+  const payBillDemo=(bill,date,amt)=>{const je=post({date,memo:'Bill payment — '+vendName(bill.vendorId),ref:'BILL#'+bill.num,source:'billpay',lines:[{acc:AP().id,debit:amt,credit:0,name:vendName(bill.vendorId)},{acc:checking,debit:0,credit:amt,name:vendName(bill.vendorId)}]});bill.payments.push({id:uid('bp_'),date,amount:amt,acc:checking,jeId:je.id});};
+  payBillDemo(b1,'2026-06-08',1400);payBillDemo(b2,'2026-06-04',1800);
+  // quick expenses
+  post({date:'2026-06-15',memo:'Adobe + accounting software',source:'expense',lines:[{acc:sw,debit:78,credit:0},{acc:checking,debit:0,credit:78}]});
+  post({date:'2026-07-01',memo:'Rent — July',source:'expense',lines:[{acc:rent,debit:1800,credit:0},{acc:checking,debit:0,credit:1800}]});
+  post({date:'2026-07-12',memo:'Packaging supplies',source:'expense',lines:[{acc:cogs,debit:240,credit:0},{acc:checking,debit:0,credit:240}]});
+  // --- inventory items ---
+  const invAsset=INVASSET().id;
+  const it1={id:uid('it_'),name:'House Blend 12oz',sku:'HB-12',type:'inventory',price:16,cost:7,qty:0,reorder:20,incomeAcc:sales,cogsAcc:cogs,assetAcc:invAsset};
+  const it2={id:uid('it_'),name:'Ceramic Mug',sku:'MUG',type:'inventory',price:14,cost:5,qty:0,reorder:15,incomeAcc:sales,cogsAcc:cogs,assetAcc:invAsset};
+  const it3={id:uid('it_'),name:'Barista Training (1 hr)',sku:'',type:'service',price:75,cost:0,qty:0,incomeAcc:svc,cogsAcc:cogs,assetAcc:invAsset};
+  S.items.push(it1,it2,it3);
+  // receive stock via a bill
+  const bStock=mkBill(v1,'GB-3402','2026-06-20','2026-07-20',[{desc:'House Blend 12oz',acc:invAsset,amount:700},{desc:'Ceramic Mug',acc:invAsset,amount:250}]);
+  bStock.lines[0].itemId=it1.id;bStock.lines[0].qty=100;bStock.lines[0].price=7;
+  bStock.lines[1].itemId=it2.id;bStock.lines[1].qty=50;bStock.lines[1].price=5;
+  S.bills.push(bStock);it1.qty=100;it2.qty=50;
+  // sell some via an invoice with COGS
+  const num=S.counters.inv++;const rev=round2(20*16+10*14);const cost2=round2(20*7+10*5);
+  const jeSale=post({date:'2026-07-14',memo:'Invoice #'+num+' — '+c2.name,ref:'INV#'+num,source:'invoice',lines:[
+    {acc:AR().id,debit:rev,credit:0,name:c2.name},{acc:sales,debit:0,credit:rev,name:'Retail sale'},
+    {acc:cogs,debit:cost2,credit:0,name:'COGS'},{acc:invAsset,debit:0,credit:cost2,name:'Inventory'}]});
+  S.invoices.push({id:uid('inv_'),num,customerId:c2.id,date:'2026-07-14',due:'2026-08-13',currency:'USD',rate:1,lines:[
+    {itemId:it1.id,desc:'House Blend 12oz',acc:sales,qty:20,price:16,amount:320,unitCost:7},
+    {itemId:it2.id,desc:'Ceramic Mug',acc:sales,qty:10,price:14,amount:140,unitCost:5}],payments:[],jeId:jeSale.id,void:false});
+  it1.qty=80;it2.qty=40;
+  // --- multi-currency: a EUR invoice ---
+  S.currencies.push({code:'EUR',rate:1.08});
+  const numE=S.counters.inv++;const eur=1200;const eRate=1.08;const eBase=round2(eur*eRate);
+  const jeE=post({date:'2026-07-10',memo:'Invoice #'+numE+' — '+c3.name+' [EUR @1.08]',ref:'INV#'+numE,source:'invoice',lines:[
+    {acc:AR().id,debit:eBase,credit:0,name:c3.name},{acc:sales,debit:0,credit:eBase,name:'Export order'}]});
+  S.invoices.push({id:uid('inv_'),num:numE,customerId:c3.id,date:'2026-07-10',due:'2026-08-09',currency:'EUR',rate:eRate,lines:[{itemId:'',desc:'Export coffee order',acc:sales,qty:1,price:1200,amount:1200}],payments:[],jeId:jeE.id,void:false});
+  // --- payroll ---
+  const e1={id:uid('em_'),name:'Jordan Rivera',email:'jordan@northwind.example',payType:'salary',rate:3200};
+  const e2={id:uid('em_'),name:'Sam Chen',email:'sam@northwind.example',payType:'hourly',rate:2100};
+  S.employees.push(e1,e2);
+  const wages=accByName(/Payroll & Wages/i).id,ptax=accByName(/Payroll Taxes/i).id,taxpay=PRTAX().id;
+  const runLines=[{empId:e1.id,gross:3200,empTax:480,erTax:256,net:2720},{empId:e2.id,gross:2100,empTax:315,erTax:168,net:1785}];
+  const gGross=5300,gEmp=795,gEr=424,gNet=4505;
+  const jePR=post({date:'2026-06-30',memo:'Payroll run — 2 employee(s)',source:'journal',lines:[
+    {acc:wages,debit:gGross,credit:0,name:'Gross wages'},{acc:ptax,debit:gEr,credit:0,name:'Employer payroll tax'},
+    {acc:checking,debit:0,credit:gNet,name:'Net pay'},{acc:taxpay,debit:0,credit:round2(gEmp+gEr),name:'Payroll taxes payable'}]});
+  S.payrollRuns.push({id:uid('pr_'),date:'2026-06-30',payAcc:checking,lines:runLines,jeId:jePR.id});
+  ensureSchema();
+  save();go('dashboard');toast('Sample company loaded');
+}
+
+/* ============================================================ PRODUCTS & INVENTORY */
+function itemValue(it){return round2((+it.qty||0)*(+it.cost||0));}
+function renderItems(){
+  const invItems=S.items.filter(i=>i.type==='inventory');
+  const invVal=invItems.reduce((s,i)=>s+itemValue(i),0);
+  const low=invItems.filter(i=>(+i.qty||0)<=(+i.reorder||0)&&(+i.reorder||0)>0);
+  setHead('Products & Inventory',S.items.length+' items · '+money(invVal)+' on hand',`<button class="btn primary" onclick="editItem()">+ New item</button>`);
+  let v='';
+  if(invVal){const ledger=INVASSET()?natBalance(INVASSET()):0;
+    v+=`<div class="cards"><div class="card"><div class="lbl">Inventory value (items)</div><div class="val">${money0(invVal)}</div><div class="hint">${invItems.length} tracked products</div></div>
+    <div class="card"><div class="lbl">Inventory Asset (ledger)</div><div class="val">${money0(ledger)}</div><div class="hint">${Math.abs(ledger-invVal)<0.5?'✓ ties to item values':'variance '+money(ledger-invVal)}</div></div>
+    <div class="card"><div class="lbl">Low stock</div><div class="val ${low.length?'neg':''}">${low.length}</div><div class="hint">at/below reorder point</div></div></div>`;}
+  v+=`<div class="panel"><div class="panel-b"><table><thead><tr><th>Item</th><th>Type</th><th class="num">On hand</th><th class="num">Cost</th><th class="num">Price</th><th class="num">Value</th><th style="width:70px"></th></tr></thead><tbody>`;
+  if(!S.items.length)v+=`<tr><td colspan="7" class="empty"><div class="big">📦</div>No products yet. Add inventory items to track stock, or services for invoicing.</td></tr>`;
+  for(const it of S.items){const lowf=it.type==='inventory'&&(+it.reorder||0)>0&&(+it.qty||0)<=(+it.reorder||0);
+    v+=`<tr><td class="strong">${esc(it.name)}${it.sku?` <span class="muted">${esc(it.sku)}</span>`:''}</td><td><span class="badge ${it.type==='inventory'?'b-blue':'b-gray'}">${it.type}</span></td><td class="num ${lowf?'neg strong':''}">${it.type==='inventory'?(+it.qty||0):'—'}${lowf?' ⚠':''}</td><td class="num muted">${it.type==='service'?'—':money(it.cost||0)}</td><td class="num">${money(it.price||0)}</td><td class="num">${it.type==='inventory'?money(itemValue(it)):'—'}</td><td class="num"><button class="btn sm ghost" onclick="editItem('${it.id}')">Edit</button></td></tr>`;}
+  v+=`</tbody></table></div></div>`;
+  $('#view').innerHTML=v;
+}
+function editItem(id){
+  const it=id?item(id):{name:'',sku:'',type:'inventory',price:'',cost:'',qty:0,reorder:0,incomeAcc:defIncome(),cogsAcc:(accByName(/Cost of Goods/i)||{}).id,assetAcc:(INVASSET()||{}).id};
+  const inc=S.accounts.filter(a=>a.type==='income'),exp=S.accounts.filter(a=>a.type==='expense'),ast=S.accounts.filter(a=>a.type==='asset');
+  const isNew=!id;
+  openModal(`<div class="modal-h"><h3>${id?'Edit':'New'} item</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row"><div><label class="f">Name</label><input id="itName" value="${esc(it.name)}"></div><div><label class="f">SKU (optional)</label><input id="itSku" value="${esc(it.sku||'')}"></div></div>
+    <div class="row3"><div><label class="f">Type</label><select id="itType" onchange="itemTypeUI()">${['inventory','service','noninventory'].map(t=>`<option value="${t}" ${it.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div><label class="f">Sales price</label><input id="itPrice" class="num" value="${it.price}" style="text-align:right"></div>
+      <div id="itCostWrap"><label class="f">Cost</label><input id="itCost" class="num" value="${it.cost}" style="text-align:right"></div></div>
+    <div class="row" id="itInvWrap"><div><label class="f">Opening qty on hand ${id?'(edit adjusts stock directly)':''}</label><input id="itQty" class="num" value="${+it.qty||0}" style="text-align:right"></div>
+      <div><label class="f">Reorder point</label><input id="itReorder" class="num" value="${+it.reorder||0}" style="text-align:right"></div></div>
+    <div class="row3"><div><label class="f">Income account</label><select id="itInc">${inc.map(a=>`<option value="${a.id}" ${it.incomeAcc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+      <div id="itCogsWrap"><label class="f">COGS / expense account</label><select id="itCogs">${exp.map(a=>`<option value="${a.id}" ${it.cogsAcc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+      <div id="itAssetWrap"><label class="f">Inventory asset account</label><select id="itAsset">${ast.map(a=>`<option value="${a.id}" ${it.assetAcc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div></div>
+    ${isNew?'<div class="tag-note">An opening qty posts an opening-balance entry (debit Inventory Asset, credit Owner\'s Equity).</div>':''}
+  </div>
+  <div class="modal-f">${id?`<button class="btn danger" onclick="deleteItem('${id}')">Delete</button>`:''}<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveItem('${id||''}')">Save</button></div>`);
+  itemTypeUI();
+}
+function itemTypeUI(){const t=$('#itType').value;const inv=t==='inventory';$('#itInvWrap').style.display=inv?'':'none';$('#itCostWrap').style.display=t==='service'?'none':'';$('#itAssetWrap').style.display=inv?'':'none';$('#itCogsWrap').style.display=t==='service'?'none':'';}
+function saveItem(id){
+  const name=$('#itName').value.trim();if(!name){toast('Name required');return;}
+  const type=$('#itType').value,price=round2(+$('#itPrice').value||0),cost=round2(+$('#itCost').value||0);
+  const incomeAcc=$('#itInc').value,cogsAcc=$('#itCogs')?$('#itCogs').value:'',assetAcc=$('#itAsset')?$('#itAsset').value:'';
+  const reorder=+$('#itReorder').value||0;const newQty=+$('#itQty').value||0;
+  if(id){const it=item(id);const oldQty=+it.qty||0;Object.assign(it,{name,sku:$('#itSku').value.trim(),type,price,cost,reorder,incomeAcc,cogsAcc,assetAcc});
+    if(type==='inventory'){const diff=round2(newQty-oldQty);it.qty=newQty;
+      if(Math.abs(diff)>0.0001){const eqAcc=accByName(/Owner's Equity/i).id;const val=round2(diff*cost);
+        if(val>0)post({date:today(),memo:'Inventory adjustment — '+name,source:'journal',lines:[{acc:assetAcc,debit:val,credit:0,name},{acc:eqAcc,debit:0,credit:val,name:'stock adj'}]});
+        else if(val<0)post({date:today(),memo:'Inventory adjustment — '+name,source:'journal',lines:[{acc:eqAcc,debit:-val,credit:0,name:'stock adj'},{acc:assetAcc,debit:0,credit:-val,name}]});}
+    }
+  }else{
+    const it={id:uid('it_'),name,sku:$('#itSku').value.trim(),type,price,cost,qty:type==='inventory'?newQty:0,reorder,incomeAcc,cogsAcc,assetAcc};
+    S.items.push(it);
+    if(type==='inventory'&&newQty>0&&cost>0){const eqAcc=accByName(/Owner's Equity/i).id;const val=round2(newQty*cost);
+      post({date:today(),memo:'Opening inventory — '+name,source:'opening',lines:[{acc:assetAcc,debit:val,credit:0,name},{acc:eqAcc,debit:0,credit:val,name:'opening stock'}]});}
+  }
+  save();closeModal();render();toast('Item saved');
+}
+function deleteItem(id){const used=S.invoices.some(i=>i.lines.some(l=>l.itemId===id))||S.bills.some(b=>b.lines.some(l=>l.itemId===id));
+  if(used){toast('Item is used on invoices/bills');return;}S.items=S.items.filter(x=>x.id!==id);save();closeModal();render();toast('Item deleted');}
+
+/* ============================================================ PAYROLL */
+function renderPayroll(){
+  const liab=PRLIAB()?natBalance(PRLIAB()):0;const taxLiab=PRTAX()?natBalance(PRTAX()):0;
+  setHead('Payroll',S.employees.length+' employees',`<button class="btn" onclick="editEmployee()">+ Add employee</button>${S.employees.length?'<button class="btn primary" onclick="runPayroll()">▶ Run payroll</button>':''}`);
+  let v=`<div class="cards"><div class="card"><div class="lbl">Payroll tax owed</div><div class="val">${money0(taxLiab)}</div><div class="hint">withheld + employer taxes payable</div></div>
+    <div class="card"><div class="lbl">Employees</div><div class="val">${S.employees.length}</div><div class="hint">${S.payrollRuns.length} pay runs recorded</div></div></div>`;
+  v+=`<div class="panel"><div class="panel-h"><h2>Employees</h2></div><div class="panel-b"><table><thead><tr><th>Name</th><th>Email</th><th>Pay type</th><th class="num">Default gross</th><th style="width:70px"></th></tr></thead><tbody>`;
+  if(!S.employees.length)v+=`<tr><td colspan="5" class="empty"><div class="big">💵</div>No employees yet</td></tr>`;
+  for(const e of S.employees)v+=`<tr><td class="strong">${esc(e.name)}</td><td class="muted">${esc(e.email||'')}</td><td>${e.payType||'salary'}</td><td class="num">${money(e.rate||0)}</td><td class="num"><button class="btn sm ghost" onclick="editEmployee('${e.id}')">Edit</button></td></tr>`;
+  v+=`</tbody></table></div></div>`;
+  if(S.payrollRuns.length){
+    v+=`<div class="panel"><div class="panel-h"><h2>Pay run history</h2></div><div class="panel-b"><table><thead><tr><th>Date</th><th>Employees</th><th class="num">Gross</th><th class="num">Withheld</th><th class="num">Employer tax</th><th class="num">Net paid</th><th></th></tr></thead><tbody>`;
+    for(const r of [...S.payrollRuns].sort((a,b)=>b.date<a.date?-1:1)){const g=r.lines.reduce((s,l)=>s+l.gross,0),et=r.lines.reduce((s,l)=>s+l.empTax,0),er=r.lines.reduce((s,l)=>s+l.erTax,0),n=r.lines.reduce((s,l)=>s+l.net,0);
+      v+=`<tr><td class="muted">${fmtDate(r.date)}</td><td>${r.lines.length}</td><td class="num">${money(g)}</td><td class="num">${money(et)}</td><td class="num">${money(er)}</td><td class="num strong">${money(n)}</td><td class="num"><button class="btn sm ghost" onclick="deletePayrollRun('${r.id}')">Delete</button></td></tr>`;}
+    v+=`</tbody></table></div></div>`;
+  }
+  $('#view').innerHTML=v;
+}
+function editEmployee(id){const e=id?S.employees.find(x=>x.id===id):{name:'',email:'',payType:'salary',rate:''};
+  openModal(`<div class="modal-h"><h3>${id?'Edit':'New'} employee</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b"><div class="row"><div><label class="f">Name</label><input id="emName" value="${esc(e.name)}"></div><div><label class="f">Email</label><input id="emEmail" value="${esc(e.email||'')}"></div></div>
+  <div class="row"><div><label class="f">Pay type</label><select id="emType"><option value="salary" ${e.payType==='salary'?'selected':''}>Salary (per period)</option><option value="hourly" ${e.payType==='hourly'?'selected':''}>Hourly</option></select></div>
+  <div><label class="f">Default gross / rate</label><input id="emRate" class="num" value="${e.rate}" style="text-align:right"></div></div></div>
+  <div class="modal-f">${id?`<button class="btn danger" onclick="deleteEmployee('${id}')">Delete</button>`:''}<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEmployee('${id||''}')">Save</button></div>`);
+}
+function saveEmployee(id){const name=$('#emName').value.trim();if(!name){toast('Name required');return;}
+  const d={name,email:$('#emEmail').value.trim(),payType:$('#emType').value,rate:round2(+$('#emRate').value||0)};
+  if(id)Object.assign(S.employees.find(x=>x.id===id),d);else S.employees.push({id:uid('em_'),...d});
+  save();closeModal();render();toast('Saved');}
+function deleteEmployee(id){S.employees=S.employees.filter(x=>x.id!==id);save();closeModal();render();toast('Employee removed');}
+function runPayroll(){
+  const banks=S.accounts.filter(a=>a.cash);
+  window.PR={date:today(),payAcc:banks[0]?banks[0].id:'',empRate:15,erRate:8,lines:S.employees.map(e=>({empId:e.id,gross:e.rate||0}))};
+  openModal(`<div class="modal-h"><h3>Run payroll</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modal-b">
+    <div class="row3"><div><label class="f">Pay date</label><input type="date" id="prDate" value="${today()}"></div>
+    <div><label class="f">Pay from</label><select id="prAcc">${banks.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
+    <div><label class="f">Employee tax withholding %</label><input id="prEmpRate" class="num" value="15" oninput="prCalc()" style="text-align:right"></div></div>
+    <div class="row"><div><label class="f">Employer payroll tax %</label><input id="prErRate" class="num" value="8" oninput="prCalc()" style="text-align:right"></div><div></div></div>
+    <label class="f">Gross pay per employee</label>
+    <table class="li-tbl"><thead><tr><th>Employee</th><th class="num">Gross</th><th class="num">Withheld</th><th class="num">Employer tax</th><th class="num">Net</th></tr></thead><tbody id="prLines"></tbody></table>
+    <div class="rep-line total" style="margin-top:12px"><span>Total net to pay</span><span class="n" id="prNet">$0.00</span></div>
+    <div class="tag-note" id="prSummary"></div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="postPayroll()">Post pay run</button></div>`,true);
+  renderPRLines();
+}
+function renderPRLines(){
+  $('#prLines').innerHTML=window.PR.lines.map((l,ix)=>{const e=S.employees.find(x=>x.id===l.empId);const er=+$('#prEmpRate')?.value||15,err=+$('#prErRate')?.value||8;const g=+l.gross||0,et=round2(g*er/100),ee=round2(g*err/100),n=round2(g-et);return `<tr>
+    <td>${esc(e?e.name:'?')}</td>
+    <td class="num" style="width:110px"><input class="num" value="${l.gross}" oninput="PR.lines[${ix}].gross=this.value;prCalc()" style="text-align:right"></td>
+    <td class="num muted">${money(et)}</td><td class="num muted">${money(ee)}</td><td class="num strong">${money(n)}</td></tr>`;}).join('');
+  prCalc();
+}
+function prCalc(){const er=+$('#prEmpRate').value||0,err=+$('#prErRate').value||0;let net=0,gross=0,empTax=0,erTax=0;
+  window.PR.lines.forEach((l,ix)=>{const g=+l.gross||0;const et=round2(g*er/100),ee=round2(g*err/100);net+=round2(g-et);gross+=g;empTax+=et;erTax+=ee;
+    const tds=$('#prLines').children[ix];if(tds){tds.children[2].textContent=money(et);tds.children[3].textContent=money(ee);tds.children[4].textContent=money(round2(g-et));}});
+  $('#prNet').textContent=money(round2(net));
+  $('#prSummary').innerHTML=`Gross ${money(round2(gross))} · Withheld ${money(round2(empTax))} · Employer tax ${money(round2(erTax))} · Debits to wages ${money(round2(gross+erTax))}`;
+}
+function postPayroll(){
+  const date=$('#prDate').value,payAcc=$('#prAcc').value,er=+$('#prEmpRate').value||0,err=+$('#prErRate').value||0;
+  const lines=window.PR.lines.map(l=>{const g=round2(+l.gross||0);const empTax=round2(g*er/100);const erTax=round2(g*err/100);return {empId:l.empId,gross:g,empTax,erTax,net:round2(g-empTax)};}).filter(l=>l.gross>0);
+  if(!lines.length){toast('Enter gross pay');return;}
+  const gross=round2(lines.reduce((s,l)=>s+l.gross,0)),empTax=round2(lines.reduce((s,l)=>s+l.empTax,0)),erTax=round2(lines.reduce((s,l)=>s+l.erTax,0)),net=round2(lines.reduce((s,l)=>s+l.net,0));
+  const wages=accByName(/Payroll & Wages/i).id,ptax=accByName(/Payroll Taxes/i).id,taxpay=PRTAX().id;
+  const je=post({date,memo:'Payroll run — '+lines.length+' employee(s)',source:'journal',lines:[
+    {acc:wages,debit:gross,credit:0,name:'Gross wages'},
+    {acc:ptax,debit:erTax,credit:0,name:'Employer payroll tax'},
+    {acc:payAcc,debit:0,credit:net,name:'Net pay'},
+    {acc:taxpay,debit:0,credit:round2(empTax+erTax),name:'Payroll taxes payable'},
+  ]});
+  S.payrollRuns.push({id:uid('pr_'),date,payAcc,lines,jeId:je.id});
+  save();closeModal();render();toast('Payroll posted');
+}
+function deletePayrollRun(id){const r=S.payrollRuns.find(x=>x.id===id);if(!r)return;if(!confirm('Delete this pay run and its journal entry?'))return;removeJE(r.jeId);S.payrollRuns=S.payrollRuns.filter(x=>x.id!==id);save();render();toast('Pay run deleted');}
+
+/* ============================================================ BANK CSV IMPORT */
+let biState={acc:null,rows:[]};
+function renderBankImport(){
+  const banks=S.accounts.filter(a=>a.cash||(a.type==='liability'&&/credit/i.test(a.name)));
+  setHead('Import Bank CSV','Bring in transactions from your bank statement','');
+  if(!banks.length){$('#view').innerHTML=`<div class="panel"><div class="empty">Mark an account as bank/cash first.</div></div>`;return;}
+  if(!biState.acc)biState.acc=banks[0].id;
+  let v=`<div class="panel"><div class="pad">
+    <div class="row"><div><label class="f">Import into account</label><select onchange="biState.acc=this.value">${banks.map(a=>`<option value="${a.id}" ${biState.acc===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div><label class="f">Upload CSV file</label><input type="file" id="biFile" accept=".csv,text/csv" onchange="biLoadFile(this)"></div></div>
+    <label class="f">…or paste CSV (columns: date, description, amount — negative = money out)</label>
+    <textarea id="biPaste" rows="5" placeholder="2026-07-01,Coffee supplier,-240.00&#10;2026-07-03,Customer deposit,1200.00"></textarea>
+    <div class="flex" style="margin-top:12px"><button class="btn" onclick="biParse()">Parse rows</button><button class="btn ghost" onclick="biSample()">Download sample CSV</button></div>
+  </div></div><div id="biPreview"></div>`;
+  $('#view').innerHTML=v;
+  if(biState.rows.length)biRenderPreview();
+}
+function biLoadFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{$('#biPaste').value=e.target.result;biParse();};r.readAsText(f);}
+function parseCSV(text){const rows=[];let row=[],cur='',q=false;for(let i=0;i<text.length;i++){const c=text[i];
+  if(q){if(c==='"'){if(text[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}
+  else{if(c==='"')q=true;else if(c===','){row.push(cur);cur='';}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;if(cur!==''||row.length){row.push(cur);rows.push(row);row=[];cur='';}}else cur+=c;}}
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}return rows;}
+function biParse(){
+  const text=$('#biPaste').value.trim();if(!text){toast('Paste or upload CSV first');return;}
+  let rows=parseCSV(text);if(!rows.length){toast('No rows');return;}
+  // detect header
+  const first=rows[0].map(x=>x.toLowerCase());
+  let di=0,desci=1,ai=2;
+  const has=first.some(h=>/date|descr|amount|debit|credit/.test(h));
+  if(has){di=first.findIndex(h=>/date/.test(h));desci=first.findIndex(h=>/desc|memo|payee|name/.test(h));ai=first.findIndex(h=>/amount/.test(h));
+    var debi=first.findIndex(h=>/debit|withdraw/.test(h)),credi=first.findIndex(h=>/credit|deposit/.test(h));
+    rows=rows.slice(1);}
+  if(di<0)di=0;if(desci<0)desci=1;
+  const guessCat=(desc,amt)=>{const d=desc.toLowerCase();const exp=S.accounts.filter(a=>a.type==='expense'),inc=S.accounts.filter(a=>a.type==='income');
+    if(amt>=0)return (inc[0]||{}).id;
+    if(/rent|lease/.test(d))return (accByName(/Rent/i)||exp[0]||{}).id;
+    if(/util|power|electric|water|gas/.test(d))return (accByName(/Utilities/i)||exp[0]||{}).id;
+    if(/software|saas|subscription|adobe|google|microsoft/.test(d))return (accByName(/Software/i)||exp[0]||{}).id;
+    if(/fee|charge|bank/.test(d))return (accByName(/Bank Fees/i)||exp[0]||{}).id;
+    if(/insur/.test(d))return (accByName(/Insurance/i)||exp[0]||{}).id;
+    if(/ad|market|facebook|meta/.test(d))return (accByName(/Advertising/i)||exp[0]||{}).id;
+    return (exp[0]||{}).id;};
+  biState.rows=rows.filter(r=>r.length>=2).map(r=>{
+    let amt;
+    if(typeof debi==='number'&&debi>=0&&typeof credi==='number'&&credi>=0){const dv=parseFloat((r[debi]||'0').replace(/[^0-9.\-]/g,''))||0,cv=parseFloat((r[credi]||'0').replace(/[^0-9.\-]/g,''))||0;amt=round2(cv-dv);}
+    else amt=round2(parseFloat((r[ai]||'0').replace(/[^0-9.\-]/g,''))||0);
+    const desc=(r[desci]||'').trim();let dt=(r[di]||'').trim();
+    // normalize date to yyyy-mm-dd
+    dt=normDate(dt);
+    const sig=dt+'|'+amt+'|'+desc.toLowerCase();
+    const dup=S.journal.some(je=>je.source==='bankimport'&&je.memo.toLowerCase().includes(desc.toLowerCase())&&je.date===dt&&je.lines.some(l=>Math.abs(Math.abs(l.debit-l.credit)-Math.abs(amt))<0.005));
+    return {date:dt,desc,amt,cat:guessCat(desc,amt),include:!dup,dup};
+  }).filter(r=>r.date&&!isNaN(r.amt));
+  biRenderPreview();
+}
+function normDate(s){s=s.trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);if(m){let[_,a,b,y]=m;if(y.length===2)y='20'+y;return `${y}-${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`;}const d=new Date(s);if(!isNaN(d))return d.toISOString().slice(0,10);return s;}
+function biRenderPreview(){
+  const cats=S.accounts.filter(a=>['expense','income','asset','liability','equity'].includes(a.type));
+  const inc=biState.rows.filter(r=>r.include).length;
+  let v=`<div class="panel"><div class="panel-h"><h2>Preview — ${biState.rows.length} rows</h2><span class="sub">${inc} selected · ${biState.rows.filter(r=>r.dup).length} possible duplicates unticked</span><span class="spacer" style="flex:1"></span><button class="btn primary" onclick="biImport()">Import ${inc} transactions</button></div>
+  <div class="panel-b"><table><thead><tr><th style="width:40px"></th><th>Date</th><th>Description</th><th class="num">Amount</th><th style="width:200px">Category</th></tr></thead><tbody>`;
+  biState.rows.forEach((r,ix)=>{v+=`<tr class="${r.include?'':'muted'}"><td><input type="checkbox" class="chk" ${r.include?'checked':''} onchange="biState.rows[${ix}].include=this.checked;biRenderPreview()"></td>
+    <td class="muted">${fmtDate(r.date)}</td><td>${esc(r.desc)}${r.dup?' <span class="badge b-amber">dup?</span>':''}</td><td class="num strong ${r.amt<0?'neg':'pos'}">${money(r.amt)}</td>
+    <td><select onchange="biState.rows[${ix}].cat=this.value">${cats.map(a=>`<option value="${a.id}" ${r.cat===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></td></tr>`;});
+  v+=`</tbody></table></div></div>`;
+  $('#biPreview').innerHTML=v;
+}
+function biImport(){
+  const bank=biState.acc;const sel=biState.rows.filter(r=>r.include);if(!sel.length){toast('Nothing selected');return;}
+  let n=0;
+  for(const r of sel){const amt=r.amt;const lines=amt>=0
+      ?[{acc:bank,debit:round2(amt),credit:0,name:r.desc},{acc:r.cat,debit:0,credit:round2(amt),name:r.desc}]
+      :[{acc:r.cat,debit:round2(-amt),credit:0,name:r.desc},{acc:bank,debit:0,credit:round2(-amt),name:r.desc}];
+    post({date:r.date,memo:r.desc||'Bank import',source:'bankimport',lines});n++;}
+  biState.rows=[];save();render();toast(n+' transactions imported');go('journal');
+}
+function biSample(){const csv='Date,Description,Amount\n2026-07-01,Sunset Property Mgmt rent,-1800.00\n2026-07-03,Customer deposit - Acme,1450.00\n2026-07-05,City Power electricity,-212.44\n2026-07-08,Adobe subscription,-54.99\n2026-07-11,Square payout,980.10\n';
+  const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='sample-bank.csv';a.click();URL.revokeObjectURL(u);}
+
+/* ============================================================ LIVE EXCHANGE RATES */
+async function fetchRates(silent){
+  if(!S.currencies.length){if(!silent)toast('Add a currency first');return;}
+  const base=baseCur();
+  try{
+    const res=await fetch('https://open.er-api.com/v6/latest/'+encodeURIComponent(base));
+    const j=await res.json();
+    if(j.result!=='success'||!j.rates)throw new Error('rate service unavailable');
+    let n=0,missing=[];
+    for(const c of S.currencies){const r=j.rates[c.code];if(r&&r>0){c.rate=Math.round((1/r)*1e6)/1e6;n++;}else missing.push(c.code);}
+    S.company.ratesUpdated=(j.time_last_update_utc||'').slice(0,16)||new Date().toISOString().slice(0,16).replace('T',' ');
+    save();if(currentPage==='settings')render();
+    if(!silent)toast('Updated '+n+' rate(s)'+(missing.length?' · no data for '+missing.join(', '):''));
+  }catch(e){if(!silent)toast('Rate fetch failed: '+e.message);}
+}
+function toggleAutoRates(v){S.company.autoRates=v;save();if(v)fetchRates();}
+
+/* ============================================================ CLOUD SYNC (multi-user) */
+let _autoPushTimer=null,_syncInterval=null,_syncing=false;
+async function syncCall(path,opts){
+  opts=opts||{};
+  const url=(S.sync.url||'').replace(/\/$/,'')+path;
+  const headers={'Content-Type':'application/json'};if(opts.auth!==false&&S.sync.token)headers['Authorization']='Bearer '+S.sync.token;
+  const res=await fetch(url,{method:opts.method||(opts.body?'POST':'GET'),headers,body:opts.body?JSON.stringify(opts.body):undefined});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){const err=new Error(data.error||('HTTP '+res.status));err.status=res.status;err.data=data;throw err;}
+  return data;
+}
+function syncStatus(msg){const el=$('#syncStatus');if(el)el.textContent=msg||'';}
+async function syncAuth(kind){
+  S.sync.url=$('#syUrl').value.trim();S.sync.email=$('#syEmail').value.trim();const pw=$('#syPass').value;
+  if(!S.sync.url||!S.sync.email||!pw){toast('Fill server, email and password');return;}
+  try{
+    const d=await syncCall('/api/'+kind,{body:{email:S.sync.email,password:pw},auth:false});
+    S.sync.token=d.token;S.sync.companies=d.companies||[];
+    // pick a company: keep current if still valid, else first, else create one
+    if(!S.sync.companies.some(c=>c.id===S.sync.companyId)){
+      if(S.sync.companies.length){setActiveCompany(S.sync.companies[0]);}
+      else{const co=await syncCall('/api/companies',{body:{name:S.company.name||'My Company'}});S.sync.companies=[{id:co.id,name:co.name,role:co.role}];setActiveCompany(co);}
+    }else{const c=S.sync.companies.find(c=>c.id===S.sync.companyId);S.sync.role=c.role;}
+    await maybePullOnSignin();
+    save(false);render();toast(kind==='register'?'Account created & signed in':'Signed in');startAutoSync();
+  }catch(e){toast('Sync: '+e.message);}
+}
+// After sign-in: pull the active company's books if the cloud has them and this device has nothing worth keeping (or the user OKs replacing).
+async function maybePullOnSignin(){
+  if(!S.sync.companyId)return;
+  try{const d=await syncCall('/api/data?company='+encodeURIComponent(S.sync.companyId));
+    S.sync.role=d.role||S.sync.role;
+    if(!d.data||!Array.isArray(d.data.accounts))return; // nothing on server yet — keep local, user can push
+    const hasLocal=S.journal.length>0||S.customers.length>0||S.vendors.length>0||S.invoices.length>0||S.items.length>0;
+    if(hasLocal&&S.sync.dirty&&!confirm('This account already has cloud books for "'+S.sync.companyName+'". Replace the books on THIS device with the cloud copy?\n\nOK = use cloud copy · Cancel = keep local (you can Push to upload it).'))return;
+    const ls=S.sync;S=d.data;ensureSchema();S.sync=ls;S.sync.lastSyncedRev=d.rev;S.sync.dirty=false;S.rev=S.rev||0;
+  }catch(e){}
+}
+function setActiveCompany(c){S.sync.companyId=c.id;S.sync.companyName=c.name;S.sync.role=c.role;S.sync.lastSyncedRev=0;}
+async function loadCompanies(){try{const d=await syncCall('/api/companies');S.sync.companies=d.companies||[];const cur=S.sync.companies.find(c=>c.id===S.sync.companyId);if(cur)S.sync.role=cur.role;save(false);}catch(e){}}
+async function createCompanyPrompt(){const name=(prompt('Name for the new company / books:')||'').trim();if(!name)return;
+  try{const co=await syncCall('/api/companies',{body:{name}});await loadCompanies();toast('Company created — switch to it and push to upload books');render();}catch(e){toast(e.message);}}
+async function switchCompany(id){
+  const c=S.sync.companies.find(x=>x.id===id);if(!c)return;
+  if(S.sync.dirty&&!confirm('You have unsynced changes on the current books. Switch anyway? (push first to keep them)'))return;
+  setActiveCompany(c);
+  // pull the selected company's books
+  try{const d=await syncCall('/api/data?company='+encodeURIComponent(id));
+    if(d.data&&Array.isArray(d.data.accounts)){const ls=S.sync;S=d.data;ensureSchema();S.sync=ls;S.sync.lastSyncedRev=d.rev;S.sync.dirty=false;S.rev=S.rev||0;save(false);go('dashboard');toast('Switched to '+c.name);}
+    else{save(false);render();toast('Switched to '+c.name+' (empty — push to upload current books)');}
+  }catch(e){toast('Switch: '+e.message);}
+}
+async function syncPush(silent){
+  if(_syncing)return;if(!canEdit()){if(!silent)toast('Your role is read-only');return;}
+  _syncing=true;syncStatus('Pushing…');
+  try{ensureSchema();
+    const payload=Object.assign({},S);delete payload.sync;
+    const d=await syncCall('/api/data?company='+encodeURIComponent(S.sync.companyId),{method:'PUT',body:{data:payload,baseRev:S.sync.lastSyncedRev,force:true}});
+    S.sync.lastSyncedRev=d.rev;S.sync.dirty=false;S.sync.lastPush=new Date().toISOString().slice(0,16).replace('T',' ');
+    save(false);if(currentPage==='settings'&&!silent)render();syncStatus('Synced ✓');if(!silent)toast('Pushed to cloud ✓');
+  }catch(e){syncStatus('Push failed');if(!silent)toast('Push failed: '+e.message);}
+  _syncing=false;
+}
+async function syncPull(manual){
+  if(manual&&!confirm('Replace the books on THIS device with the cloud copy?'))return;
+  if(_syncing)return;_syncing=true;syncStatus('Pulling…');
+  try{const d=await syncCall('/api/data?company='+encodeURIComponent(S.sync.companyId));
+    if(!d.data||!Array.isArray(d.data.accounts))throw new Error('No cloud data for this company yet');
+    const ls=S.sync;S=d.data;ensureSchema();S.sync=ls;S.sync.lastSyncedRev=d.rev;S.sync.dirty=false;S.rev=S.rev||0;
+    save(false);go('dashboard');syncStatus('Synced ✓');toast('Pulled from cloud ✓');
+  }catch(e){syncStatus('Pull failed');if(manual)toast('Pull failed: '+e.message);}
+  _syncing=false;
+}
+function armAutoPush(){clearTimeout(_autoPushTimer);_autoPushTimer=setTimeout(()=>{if(S.sync.dirty&&S.sync.auto&&S.sync.token&&canEdit())syncPush(true);},2500);}
+async function autoSyncTick(){
+  if(_syncing||!S.sync.auto||!S.sync.token||!S.sync.companyId)return;
+  try{const m=await syncCall('/api/meta?company='+encodeURIComponent(S.sync.companyId));
+    S.sync.role=m.role;
+    const remoteNewer=(m.rev||0)>(S.sync.lastSyncedRev||0);
+    if(S.sync.dirty&&canEdit()&&!remoteNewer){await syncPush(true);}
+    else if(remoteNewer&&!S.sync.dirty){await syncPull(false);}
+    else if(remoteNewer&&S.sync.dirty){syncStatus('⚠ conflict — remote changed too; push or pull manually');}
+  }catch(e){}
+}
+function startAutoSync(){clearInterval(_syncInterval);if(S.sync.auto&&S.sync.token){_syncInterval=setInterval(autoSyncTick,60000);autoSyncTick();}}
+function toggleAutoSync(v){S.sync.auto=v;save(false);render();if(v){startAutoSync();toast('Auto-sync on');}else{clearInterval(_syncInterval);toast('Auto-sync off');}}
+function syncLogout(){S.sync.token='';S.sync.role='';S.sync.companies=[];clearInterval(_syncInterval);save(false);render();toast('Signed out');}
+async function inviteMember(){
+  const email=(prompt('Email of the person to invite (they sign in with this email):')||'').trim();if(!email)return;
+  const role=(prompt('Role — type one of: admin, member, viewer','member')||'').trim().toLowerCase();
+  if(!['admin','member','viewer'].includes(role)){toast('Role must be admin, member or viewer');return;}
+  try{const d=await syncCall('/api/companies/'+encodeURIComponent(S.sync.companyId)+'/members',{body:{email,role}});
+    toast(d.pending?'Invited — they get access once they register this email':'Member added');showMembers();}
+  catch(e){toast(e.message);}
+}
+async function showMembers(){
+  try{const d=await syncCall('/api/companies/'+encodeURIComponent(S.sync.companyId)+'/members');
+    const canMg=['owner','admin'].includes(S.sync.role);
+    let v=`<div class="modal-h"><h3>Members — ${esc(S.sync.companyName)}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-b"><table><thead><tr><th>Email</th><th>Role</th><th></th></tr></thead><tbody>`;
+    for(const m of d.members)v+=`<tr><td class="strong">${esc(m.email)}</td><td><span class="badge ${m.role==='owner'?'b-blue':m.role==='viewer'?'b-gray':'b-green'}">${m.role}</span></td><td class="num">${canMg&&m.role!=='owner'?`<button class="btn sm ghost danger" onclick="removeMember('${esc(m.email)}')">Remove</button>`:''}</td></tr>`;
+    v+=`</tbody></table></div><div class="modal-f">${canMg?`<button class="btn" onclick="inviteMember()">+ Invite member</button>`:''}<button class="btn primary" onclick="closeModal()">Done</button></div>`;
+    openModal(v);
+  }catch(e){toast(e.message);}
+}
+async function removeMember(email){if(!confirm('Remove '+email+'?'))return;
+  try{await syncCall('/api/companies/'+encodeURIComponent(S.sync.companyId)+'/members/'+encodeURIComponent(email),{method:'DELETE'});showMembers();}catch(e){toast(e.message);}}
+
+/* ---------- boot ---------- */
+load();
+// when the app is served from a web server (not opened as a file), default the sync target to this same origin
+try{if(location.protocol.indexOf('http')===0&&S.sync&&!S.sync.url){S.sync.url=location.origin;save(false);}}catch(e){}
+buildNav();render();
+// live rates on open (if enabled)
+if(S.company.autoRates&&S.currencies.length)setTimeout(()=>fetchRates(true),400);
+// resume background sync (if enabled & signed in)
+if(S.sync&&S.sync.auto&&S.sync.token&&S.sync.companyId)setTimeout(startAutoSync,600);
+</script>
+</body>
+</html>

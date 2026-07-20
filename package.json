@@ -1,0 +1,16 @@
+{
+  "name": "ledgerbook-server",
+  "version": "3.0.0",
+  "description": "Multi-user sync backend that also serves the LedgerBook bookkeeping app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}

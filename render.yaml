@@ -1,0 +1,32 @@
+# Render Blueprint — provisions the app + a managed Postgres database.
+# In Render: New → Blueprint → connect this repo → Apply.
+databases:
+  - name: ledgerbook-db
+    plan: free            # free Postgres to start (upgrade later for longevity/backups)
+    databaseName: ledgerbook
+    user: ledgerbook
+
+services:
+  - type: web
+    name: ledgerbook
+    runtime: node
+    plan: free            # free web service (sleeps when idle; wakes on first request)
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ledgerbook-db
+          property: connectionString
+      - key: NODE_VERSION
+        value: "20"
+      # Comma-separated admin emails (they can open /admin). Leave blank to make
+      # the first registered account the admin.
+      - key: ADMIN_EMAILS
+        sync: false
+      # Automatic backups: interval in hours (0 disables) and how many to keep.
+      - key: BACKUP_INTERVAL_HOURS
+        value: "24"
+      - key: BACKUP_KEEP
+        value: "14"
